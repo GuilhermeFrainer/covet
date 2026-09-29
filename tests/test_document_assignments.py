@@ -14,6 +14,7 @@ from src.document_assignments import (
     representative_identities,
     validate_assignments,
 )
+from src.metadata_alignment import metadata_alignment
 
 
 @pytest.fixture
@@ -475,3 +476,38 @@ def test_optimizer_cli_passes_prepared_inputs(
     assert manifest["seed"] == 43
     assert manifest["input"]["sampling_seed"] == 42
     assert manifest["status"] == "success"
+
+
+def test_prepared_data_keeps_raw_covariates_aligned(prepared):
+    data, _ = prepared
+    assert data.covariates.columns == ["rate", "kind"]
+    assert data.covariates.height == len(data.text)
+
+
+def test_assignment_run_reports_alignment_in_csv_row_and_metrics_json(
+    tmp_path, prepared, monkeypatch
+):
+    from src import evaluation
+
+    # The fixture config requests no coherence/diversity metrics.
+    monkeypatch.setattr(evaluation, "bertopic_output_to_octis", lambda m: {})
+    data, config = prepared
+    run = make_run(tmp_path, prepared)
+    metrics, _ = run.execute(
+        topic_model=FittedModel(),
+        model_id="fed_model",
+        text=data.text,
+        embeddings=data.embeddings,
+        config=config,
+        scaled_metadata=data.metadata,
+    )
+    expected = metadata_alignment(FittedModel.topics_, data.covariates)
+    assert metrics["meta_ami_mean"] == pytest.approx(expected["meta_ami_mean"])
+    assert "meta_ami_by_covariate" not in metrics
+
+    saved = json.loads((run.directory / "metrics.json").read_text(encoding="utf-8"))
+    assert saved["meta_ami_by_covariate"] == pytest.approx(
+        expected["meta_ami_by_covariate"]
+    )
+    manifest = json.loads(run.path.read_text(encoding="utf-8"))
+    assert "method" in manifest["metadata_alignment"]

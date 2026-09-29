@@ -499,6 +499,8 @@ class Optimizer:
             exp_metrics.extend(
                 self.experiment_config["experiment"].get("diversity_metrics", [])
             )
+        # Descriptive topic–metadata alignment (see src/metadata_alignment.py).
+        exp_metrics.append("meta_ami_mean")
 
         provenance_cols = run_provenance.PROVENANCE_COLUMNS
 

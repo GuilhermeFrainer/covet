@@ -98,6 +98,10 @@ For every individual model run, the pipeline computes:
 * **Topic Diversity**:
   * **$\text{IRBO}$ (Inverted Rank-Biased Overlap)**: Mutual exclusivity of topic top words with geometric rank decay (penalizes top-ranked word overlaps). Scale: $[0, 1]$ (higher is better).
   * **$\text{Topic Diversity}$**: Percentage of unique words across top-10 words of all topics ($\frac{|\bigcup_k W_k|}{k \times 10}$). Scale: $[0, 1]$ (higher is better).
+* **Topic–Metadata Alignment** (added 2026-09-29, [`src/metadata_alignment.py`](../src/metadata_alignment.py)):
+  * **`meta_ami_mean`**: Adjusted mutual information (AMI) between each document's final topic and each **raw** covariate, averaged over the dataset's covariates. Numerics with more than 5 distinct values are split into quintile bins over the run's documents; other covariates are used as categories; noise (topic $-1$) counts as its own topic. AMI rather than NMI because NMI rises by chance with the number of topics. Scale: $\approx 0$ for unrelated partitions, $1$ for identical ones.
+  * **Descriptive outcome, not "higher is better"**: topics that simply reproduce the metadata groups score $1$ (e.g., naive Append UMAP on Gadarian). Read it alongside coherence as a trade-off.
+  * Per-covariate values are stored in each run's `output/document_assignments/<dataset>/<run_uid>/metrics.json` (`meta_ami_by_covariate`) and manifest (`metadata_alignment`). They're computed only for runs executed through `run_optimizer.py` with assignment export; STM is not covered yet.
 * **Clustering & Operational Metrics**:
   * **$\text{Outliers}$**: Count of documents assigned to topic $-1$ (in HDBSCAN models).
   * **$\text{Noise Coverage \%}$ & $\text{Clustered Coverage \%}$**: Document retention rates.

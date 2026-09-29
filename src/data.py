@@ -15,6 +15,8 @@ class PreparedData:
     metadata: pl.DataFrame
     documents: pl.DataFrame
     provenance: dict
+    # Raw (unscaled, unencoded) covariates, row-aligned with text.
+    covariates: Optional[pl.DataFrame] = None
 
     def __iter__(self):
         return iter((self.text, self.embeddings, self.metadata))
@@ -187,7 +189,14 @@ def load_and_prep_data(
                 "path/checksum do not reconstruct an overwritten file."
             ),
         }
-        return PreparedData(text, embeddings, processed_metadata, documents, provenance)
+        return PreparedData(
+            text,
+            embeddings,
+            processed_metadata,
+            documents,
+            provenance,
+            covariates=df.select(cov_cols),
+        )
 
     return text, embeddings, processed_metadata
 

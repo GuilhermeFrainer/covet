@@ -13,7 +13,7 @@ from uuid import uuid4
 import numpy as np
 import polars as pl
 
-from src import run_provenance, utils
+from src import metadata_alignment, run_provenance, utils
 
 
 def file_checksum(path):
@@ -153,6 +153,7 @@ class AssignmentRun:
         self.prepared = prepared
         self.model_config = model_config
         self.enabled = enabled
+        self.alignment = None
         self.metadata = {**metadata, **self.links}
         self.payload = {
             "schema_version": 1,
@@ -236,6 +237,12 @@ class AssignmentRun:
             except PackageNotFoundError:
                 dependencies[package] = "not installed"
         self.payload["dependency_versions"] = dependencies
+        self.alignment = self._metadata_alignment(model, is_tritopic)
+        if self.alignment is not None:
+            self.payload["metadata_alignment"] = {
+                **self.alignment,
+                "method": metadata_alignment.METHOD,
+            }
         self.save()
         if not self.enabled:
             return
@@ -286,6 +293,21 @@ class AssignmentRun:
             )
         self.save()
 
+    def _metadata_alignment(self, model, is_tritopic):
+        """Topic–covariate AMI; a failure here never fails the training run."""
+        covariates = getattr(self.prepared, "covariates", None)
+        if covariates is None:
+            return None
+        try:
+            labels = model.labels_ if is_tritopic else model.topics_
+            return metadata_alignment.metadata_alignment(labels, covariates)
+        except Exception as error:
+            logging.getLogger("pipeline").warning(
+                "Metadata alignment failed for %s: %s", self.metadata["model_id"], error
+            )
+            self.payload["metadata_alignment_error"] = repr(error)
+            return None
+
     def execute(self, **training_kwargs):
         from src.training import train_and_evaluate
 
@@ -297,7 +319,15 @@ class AssignmentRun:
             metrics.update(self.metadata)
             metrics.update(self.payload.get("provenance", {}))
             metrics.update(self.links)
-            atomic_json(self.directory / "metrics.json", metrics)
+            by_covariate = {}
+            if self.alignment is not None:
+                metrics["meta_ami_mean"] = self.alignment["meta_ami_mean"]
+                by_covariate = self.alignment["meta_ami_by_covariate"]
+            # Per-covariate values vary by dataset, so they stay out of the CSV row.
+            atomic_json(
+                self.directory / "metrics.json",
+                {**metrics, "meta_ami_by_covariate": by_covariate},
+            )
             self.record("metrics.json", 1)
             self.payload["status"] = "success"
             self.save()
