@@ -47,7 +47,7 @@ docker run --rm \
     -w /app/ca_bertopic \
     -e RENV_PATHS_LIBRARY=/app/renv/library \
     ${IMAGE_NAME}:${VERSION} \
-    Rscript scripts/hello_world.R
+    Rscript scripts/r_scripts/stm_smoke_test.R
 
 # 6. Sync RESULTS back to $HOME
 echo "Syncing results back to $HOME/slurm..."

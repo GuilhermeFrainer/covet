@@ -263,7 +263,6 @@ uv run pytest
 │   ├── analysis/              # Results merge, best models scraper, noise coverage
 │   ├── pipelines/             # Local Windows (.ps1), Linux (.sh), and SLURM runners
 │   ├── r_scripts/             # R scripts for Bag-of-Words and STM training
-│   ├── temp/                  # Temporary test sandboxes
 │   └── dashboard.py           # Streamlit results dashboard
 ├── src/                       # Core Python library
 │   ├── builders/              # Dataset-specific ingestion builders

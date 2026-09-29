@@ -39,6 +39,7 @@ The top-level `batch/` directory has been removed, and its contents have been re
 │   │
 │   ├── r_scripts/              # R-specific execution scripts
 │   │   ├── build_bow.R
+│   │   ├── stm_smoke_test.R
 │   │   └── train_stm.R
 │   │
 │   ├── pipelines/              # Orchestrators and batch runner scripts
@@ -46,11 +47,7 @@ The top-level `batch/` directory has been removed, and its contents have been re
 │   │   ├── local_unix/         # Local Linux/macOS shell scripts (.sh) [IGNORED]
 │   │   └── slurm/              # Cluster/Slurm cluster scripts (.sh) [TRACKED]
 │   │
-│   ├── dashboard.py            # Streamlit visual results dashboard (entrypoint)
-│   │
-│   └── temp/                   # Temporary testing and sandbox scripts [TRACKED]
-│       ├── hello_world.R
-│       └── temp_check_counts.py
+│   └── dashboard.py            # Streamlit visual results dashboard (entrypoint)
 ```
 
 ---
@@ -91,6 +88,7 @@ Scripts for processing, evaluating, and compiling results.
 Keeps R language scripts separated from the Python codebase.
 - **[build_bow.R](../scripts/r_scripts/build_bow.R)**: Generates bag-of-words (BoW) representations and saves STM-compatible RDS data objects.
 - **[train_stm.R](../scripts/r_scripts/train_stm.R)**: Subroutine executing the training of Structural Topic Models in R.
+- **[stm_smoke_test.R](../scripts/r_scripts/stm_smoke_test.R)**: Trains a tiny STM on 200 Trump documents to check the R environment. It is the default command of the `Dockerfile.stm` image and is used by `scripts/pipelines/slurm/slurm_hello.sh`.
 
 ### 5. Pipelines & Orchestration ([scripts/pipelines/](../scripts/pipelines))
 Consolidates sequential execution and batch runners.

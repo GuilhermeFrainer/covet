@@ -34,7 +34,7 @@ RUN R -e "install.packages('renv', repos='https://cloud.r-project.org')" \
     && R -e "renv::restore()"
 
 # 4. Copy the script into the container
-COPY scripts/temp/hello_world.R /app/hello_world.R
+COPY scripts/r_scripts/stm_smoke_test.R /app/stm_smoke_test.R
 
 # Define the command that runs when the container starts
-CMD ["Rscript", "/app/hello_world.R"]
+CMD ["Rscript", "/app/stm_smoke_test.R"]
