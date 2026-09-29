@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -511,3 +512,39 @@ def test_assignment_run_reports_alignment_in_csv_row_and_metrics_json(
     )
     manifest = json.loads(run.path.read_text(encoding="utf-8"))
     assert "method" in manifest["metadata_alignment"]
+
+
+def test_backfill_reproduces_run_time_alignment(tmp_path, prepared, monkeypatch):
+    import importlib.util
+
+    from src import evaluation
+    from src.document_assignments import file_checksum
+
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "analysis"
+        / "backfill_metadata_alignment.py"
+    )
+    spec = importlib.util.spec_from_file_location("backfill", script)
+    backfill = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(backfill)
+
+    monkeypatch.setattr(evaluation, "bertopic_output_to_octis", lambda m: {})
+    data, config = prepared
+    run = make_run(tmp_path, prepared)
+    metrics, _ = run.execute(
+        topic_model=FittedModel(),
+        model_id="fed_model",
+        text=data.text,
+        embeddings=data.embeddings,
+        config=config,
+    )
+    source = Path(config["experiment"]["dataset_path"])
+    record = backfill.score_run(run.path, {file_checksum(source): source}, {})
+    assert record["skip_reason"] is None
+    assert record["meta_ami_mean"] == pytest.approx(metrics["meta_ami_mean"])
+    assert record["matches_run_time_value"] is True
+
+    missing = backfill.score_run(run.path, {}, {})
+    assert missing["skip_reason"] == "source dataset not found locally"
