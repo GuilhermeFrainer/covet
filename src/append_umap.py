@@ -76,8 +76,10 @@ class AppendUMAP(UMAP):
         Fits the data and transforms it into the embedding space on the
         concatenated input.
         """
-        X_combined = self._concatenate_metadata(X)
-        return super().fit_transform(X_combined, y, *args, **kwargs)
+        # UMAP.fit_transform calls self.fit, which already concatenates;
+        # concatenating here too would append the metadata twice.
+        self.fit(X, y, *args, **kwargs)
+        return self.embedding_
 
     @staticmethod
     def shape_dims(df: pl.DataFrame) -> np.ndarray:
