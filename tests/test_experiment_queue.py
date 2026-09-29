@@ -345,7 +345,8 @@ class TestJobConstruction:
         ]
 
     def test_standard_vs_split_job_counts(self):
-        # 4 default datasets, 27 models minus stm = 26 models
+        # STM jobs are disabled, so every model except stm yields one job
+        n_jobs = len(DEFAULT_DATASETS) * (len(ALL_MODELS) - 1)
         plan_standard = create_queue_plan(
             raw_datasets=None,
             raw_models=None,
@@ -355,7 +356,7 @@ class TestJobConstruction:
             use_stemmed=False,
             keep_rep_stopwords=False,
         )
-        assert plan_standard.total_jobs == 4 * 26  # 104
+        assert plan_standard.total_jobs == n_jobs
 
         plan_split = create_queue_plan(
             raw_datasets=None,
@@ -366,7 +367,7 @@ class TestJobConstruction:
             use_stemmed=False,
             keep_rep_stopwords=False,
         )
-        assert plan_split.total_jobs == 4 * 26 * 15  # 1560
+        assert plan_split.total_jobs == n_jobs * len(DEFAULT_MODEL_INDICES)
 
 
 class TestCreateQueuePlan:
