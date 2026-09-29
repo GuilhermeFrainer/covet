@@ -43,7 +43,10 @@ def test_agreed_primary_boundaries(catalog):
 def test_scope_keeps_reference_and_explicit_external_baselines(catalog):
     df = annotate_models(pl.DataFrame({"model_name": list(catalog)}), catalog)
     selected = filter_catalog(df, baselines=["baseline"])
-    assert set(selected["catalog_id"]) == {"baseline", "append_umap", "aligned_umap", "mv_hdbscan"}
+    weighted_append = {f"append_umap_w{w}" for w in ("000", "005", "010", "020", "030", "050")}
+    assert set(selected["catalog_id"]) == {
+        "baseline", "append_umap", "aligned_umap", "mv_hdbscan", *weighted_append
+    }
     selected = filter_catalog(df, families=["spectral"], include_external=True)
     assert {"stm", "tritopic", "fast_tritopic", "umap_spectral"} <= set(selected["catalog_id"])
     assert "append_umap_mv_spectral" not in selected["catalog_id"]
@@ -56,6 +59,8 @@ def test_scope_keeps_reference_and_explicit_external_baselines(catalog):
 def test_historical_names_and_unknowns(catalog):
     assert resolve_model_id("stemmed_mv_spectral_info0_2_seed36201624", catalog) == "mv_spectral_info0"
     assert resolve_model_id("umap_mv_hdbscan_1", catalog) == "mv_hdbscan"
+    weighted_run = "stemmed_append_umap_w010_3_seed36201624"
+    assert resolve_model_id(weighted_run, catalog) == "append_umap_w010"
     df = annotate_models(pl.DataFrame({"model_id": ["future_model", None, "baseline"]}), catalog)
     assert filter_catalog(df, priority="unclassified").height == 2
     assert filter_catalog(df, priority="all").height == 3

@@ -62,6 +62,8 @@ Across all **194 active standard UMAP-family configurations** (plain `umap`, `ap
 - `metric: "cosine"`
 - `low_memory: false`
 
+**Exception (2026-09-29): weighted Append UMAP.** The `append_umap_w*` configurations set `metadata_weight` and use `metric: "euclidean"`. `AppendUMAP` L2-normalizes the text embeddings, and on unit vectors squared Euclidean distance equals `2 - 2 * cosine`, so text neighbours are ranked exactly as under cosine. Euclidean is needed because the metadata block is calibrated in squared-Euclidean units and keeps its levels; cosine would reduce the metadata to its direction. See [experiments_summary.md](experiments_summary.md) §2.2. The parity test enforces `euclidean` for these configurations and `cosine` for all others.
+
 Across all **50 active standard PCA configurations**:
 - `n_components: 5` (guaranteeing structural dimensionality parity with UMAP).
 - Enforced with an automated fallback in `src/models.py` (`get_algorithm`) so omitted `n_components` cannot trigger sklearn's default of retaining all dimensions.

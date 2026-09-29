@@ -27,7 +27,55 @@ models:
     reduction: aligned_umap
     clustering: multi_view_spherical_k_means
   append_umap:
-    label: BERTopic with Append UMAP.
+    label: BERTopic with naive (unweighted) Append UMAP.
+    priority: primary
+    role: ablation
+    family: hdbscan
+    baseline_id: baseline
+    reduction: append_umap
+    clustering: hdbscan
+  append_umap_w000:
+    label: BERTopic with weighted Append UMAP (w=0, metadata ignored; parity check).
+    priority: primary
+    role: ablation
+    family: hdbscan
+    baseline_id: baseline
+    reduction: append_umap
+    clustering: hdbscan
+  append_umap_w005:
+    label: BERTopic with weighted Append UMAP (w=0.05).
+    priority: primary
+    role: ablation
+    family: hdbscan
+    baseline_id: baseline
+    reduction: append_umap
+    clustering: hdbscan
+  append_umap_w010:
+    label: BERTopic with weighted Append UMAP (w=0.1).
+    priority: primary
+    role: ablation
+    family: hdbscan
+    baseline_id: baseline
+    reduction: append_umap
+    clustering: hdbscan
+  append_umap_w020:
+    label: BERTopic with weighted Append UMAP (w=0.2).
+    priority: primary
+    role: ablation
+    family: hdbscan
+    baseline_id: baseline
+    reduction: append_umap
+    clustering: hdbscan
+  append_umap_w030:
+    label: BERTopic with weighted Append UMAP (w=0.3).
+    priority: primary
+    role: ablation
+    family: hdbscan
+    baseline_id: baseline
+    reduction: append_umap
+    clustering: hdbscan
+  append_umap_w050:
+    label: BERTopic with weighted Append UMAP (w=0.5).
     priority: primary
     role: ablation
     family: hdbscan

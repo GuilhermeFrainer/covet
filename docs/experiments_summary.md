@@ -46,8 +46,9 @@ The evaluated models span eight architectural paradigms:
 * **`umap_spectral`**: BERTopic with UMAP $\to$ Spectral Clustering.
 * **`pca_k_means`**: BERTopic with PCA dimensionality reduction $\to$ K-Means.
 
-### 2.2 Early Fusion (Naive Concatenation)
-* **`append_umap`**: Horizontally concatenates scaled metadata directly to dense text embeddings before UMAP $\to$ HDBSCAN $\to$ c-TF-IDF.
+### 2.2 Early Fusion (Concatenation)
+* **`append_umap`** (naive): Horizontally concatenates scaled metadata directly to dense text embeddings before cosine UMAP $\to$ HDBSCAN $\to$ c-TF-IDF. The metadata block is not balanced against the unit-norm text block, so under cosine the text's weight in document similarity is about $1/(1+\lVert m\rVert^2)$. Measured on 2026-09-29, that was 0.13 (FED), 0.23 (Yelp), 0.31 (Trump), 0.36 (ANES) and 0.44 (Gadarian). In a single-seed Gadarian fit, the resulting topics reproduced the dataset's 14 metadata profiles exactly (NMI = 1.00). These runs are kept as the unweighted early-fusion reference, not as a balanced text+metadata model.
+* **`append_umap_w000` … `append_umap_w050`** (weighted): Text embeddings are L2-normalized. Each block is divided by the square root of its mean pairwise squared distance (fitted on the training data), and the blocks are scaled by $\sqrt{1-w}$ and $\sqrt{w}$. Euclidean UMAP then sees $d^2 = (1-w)\,d_\text{text}^2/s_\text{text} + w\,d_\text{meta}^2/s_\text{meta}$, so $w$ is the metadata share of the average squared distance, and metadata levels are preserved. Grid $w \in \{0, 0.05, 0.1, 0.2, 0.3, 0.5\}$, dense at low $w$ because text neighbourhoods change fastest there. $w=0$ ignores metadata and serves as a parity check against `baseline`: same text neighbour ranking, with UMAP edge weights computed from Euclidean rather than cosine distances. Report the full curve rather than selecting a best $w$ per dataset.
 * **`append_umap_mv_k_means`**: Append UMAP $\to$ Multi-View K-Means.
 * **`append_umap_mv_spherical_k_means`**: Append UMAP $\to$ Multi-View Spherical K-Means.
 * **`append_umap_mv_spectral` & `append_umap_mv_spectral_info0`**: Append UMAP $\to$ Multi-View Spectral.

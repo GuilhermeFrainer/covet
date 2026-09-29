@@ -1,0 +1,36 @@
+extends: datasets/yelp_stemmed.yaml
+experiment:
+  name: yelp_stemmed_standard_append_umap_w005
+  description: Weighted Append UMAP (metadata share w=0.05) on yelp_stemmed with standard
+    topic counts.
+  random_state:
+  - 36201624
+  - 62613654
+  - 57116123
+  decimal_digits: 3
+model:
+  id: append_umap_w005
+  description: 'BERTopic with weighted Append UMAP: L2-normalized text and calibrated
+    metadata, metadata share w=0.05 of the mean squared distance.'
+  dimensionality_reduction:
+    type: append_umap
+    params:
+      n_components: 5
+      n_neighbors: 15
+      min_dist: 0.0
+      metric: euclidean
+      low_memory: false
+      metadata_weight: 0.05
+  clustering:
+    type: hdbscan
+    params:
+      min_cluster_size: 10
+      prediction_data: true
+  bertopic:
+    params:
+      nr_topics:
+      - 10
+      - 20
+      - 30
+      - 40
+      - 50

@@ -70,7 +70,16 @@ def test_active_standard_configs_parity():
                 assert dr_params.get("n_components") == 5, f"{f}: n_components != 5"
                 assert dr_params.get("n_neighbors") == 15, f"{f}: n_neighbors != 15"
                 assert dr_params.get("min_dist") == 0.0, f"{f}: min_dist != 0.0"
-                assert dr_params.get("metric") == "cosine", f"{f}: metric != cosine"
+                # Weighted AppendUMAP calibrates squared Euclidean distances on
+                # L2-normalized text, which ranks text neighbors as cosine does.
+                expected_metric = (
+                    "euclidean"
+                    if dr_type == "append_umap" and "metadata_weight" in dr_params
+                    else "cosine"
+                )
+                assert (
+                    dr_params.get("metric") == expected_metric
+                ), f"{f}: metric != {expected_metric}"
                 assert (
                     dr_params.get("low_memory") is False
                 ), f"{f}: low_memory != False"
