@@ -141,4 +141,4 @@ Audit dataset and document sample/order; preprocessing regime; text and embeddin
 
 Current metadata processing uses min-max scaling for numeric covariates, one-hot encoding for categoricals, and float conversion for binary fields. These transformations and their fitted input sample belong in the parity specification.
 
-Python-only preprocessing, strict row alignment, representation-layer stopword filtering, and result-regime isolation remain repository requirements from [GEMINI.md](../GEMINI.md).
+Python-only preprocessing, strict row alignment, representation-layer stopword filtering, and result-regime isolation remain repository requirements from [AGENTS.md](../AGENTS.md).

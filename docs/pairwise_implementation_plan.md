@@ -38,7 +38,7 @@ At minimum, cover:
 - Deterministic output ordering and source selection.
 - Consistency between graph references and tested comparisons.
 
-Use focused tests for each stage and full integration fixtures for the final pipeline. Follow [GEMINI.md](../GEMINI.md): after implementation/configuration changes, run the full `uv run pytest` suite and apply the repository's Ruff conventions. Documentation-only registration does not constitute implementation or a completed test-suite validation.
+Use focused tests for each stage and full integration fixtures for the final pipeline. Follow [AGENTS.md](../AGENTS.md): after implementation/configuration changes, run the full `uv run pytest` suite and apply the repository's Ruff conventions. Documentation-only registration does not constitute implementation or a completed test-suite validation.
 
 ## Decisions still needed from the user
 
