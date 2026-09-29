@@ -83,7 +83,7 @@ Scripts for processing, evaluating, and compiling results.
 - **[compare_stopword_impact.py](../scripts/analysis/compare_stopword_impact.py)**: Compares metrics between runs with and without representation stopword removal.
 - **[demsar_all_vs_all_analysis.py](../scripts/analysis/demsar_all_vs_all_analysis.py)**: Demšar (2006) all-vs-all comparisons: Friedman/Iman-Davenport, Nemenyi critical difference, and Holm-adjusted pairwise tests.
 - **[demsar_delta_analysis.py](../scripts/analysis/demsar_delta_analysis.py)**: Model-by-metric delta tables with exact Wilcoxon tests and Holm adjustment.
-- **[backfill_metadata_alignment.py](../scripts/analysis/backfill_metadata_alignment.py)**: Scores topic–metadata alignment (AMI) for already-exported runs without retraining; writes `results/metadata_alignment_backfill.csv`.
+- **[backfill_metadata_alignment.py](../scripts/analysis/backfill_metadata_alignment.py)**: Scores topic–metadata alignment (AMI) for already-exported runs without retraining; writes `results/derived/metadata_alignment_backfill.csv`.
 - **[inspect_document_assignments.py](../scripts/analysis/inspect_document_assignments.py)**: Read-only inspection of exported per-document topic assignments and raw metadata (see [document_assignment_exports.md](document_assignment_exports.md)).
 
 ### 4. R Scripts ([scripts/r_scripts/](../scripts/r_scripts))

@@ -5,7 +5,8 @@ their per-document assignments were exported. Each run's source dataset is
 located by the SHA-256 recorded in its manifest (not by path, which is often
 a cluster scratch path), and the assignments file is verified against its
 recorded checksum. Existing artifacts are never modified: the results go to a
-long-format sidecar CSV keyed by ``run_uid``.
+long-format sidecar CSV keyed by ``run_uid``, under ``results/derived/`` so the
+dashboard and merge_results.py (which scan only the top level) ignore it.
 
 Usage:
     uv run python scripts/analysis/backfill_metadata_alignment.py
@@ -29,7 +30,11 @@ from src.metadata_alignment import metadata_alignment
 
 ASSIGNMENTS_DIR = PROJECT_ROOT / "output" / "document_assignments"
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
-DEFAULT_OUTPUT = PROJECT_ROOT / "results" / "metadata_alignment_backfill.csv"
+# Kept out of the top level of results/: the dashboard loads every top-level CSV
+# as run results, and merge_results.py would absorb and archive it as a raw run.
+DEFAULT_OUTPUT = (
+    PROJECT_ROOT / "results" / "derived" / "metadata_alignment_backfill.csv"
+)
 
 
 def covariate_columns(covariates) -> list[str]:
