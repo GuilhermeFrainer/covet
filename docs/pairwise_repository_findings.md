@@ -2,7 +2,7 @@
 
 Part of the [pairwise comparison proposal](pairwise_comparisons.md). Findings describe the inspection on **2026-09-16**; coverage and implementation may change later.
 
-**User clarification, 2026-09-16:** the baseline is intended to use BERTopic defaults. The 2-versus-5 UMAP dimensionality difference is therefore a confirmed configuration bug, and the user will fix it. This supersedes the earlier suggestion that retaining a renamed 2-dimensional baseline might satisfy the intended experiment. Track current issues in [REPOSITORY_ISSUES.md](../REPOSITORY_ISSUES.md).
+**User clarification, 2026-09-16:** the baseline is intended to use BERTopic defaults. The 2-versus-5 UMAP dimensionality difference is therefore a confirmed configuration bug, and the user will fix it. This supersedes the earlier suggestion that retaining a renamed 2-dimensional baseline might satisfy the intended experiment. Track current issues in [REPOSITORY_ISSUES.md](REPOSITORY_ISSUES.md).
 
 ## Current experiment representation
 

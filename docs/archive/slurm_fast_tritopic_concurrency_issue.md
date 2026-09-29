@@ -49,7 +49,7 @@ In job `818952`, execution halted immediately after package installation. The Py
 ## 3. Root Cause Analysis
 
 ### 3.1 Why Did This Start with `fast_tritopic`?
-Prior to commit `9fde04b`, all dependencies in [pyproject.toml](../pyproject.toml) were pre-compiled wheels fetched from PyPI or NVIDIA's index. When `uv run` was invoked on a compute node, `uv` only read static binary wheels from the cache. There was **no source compilation**, no PEP 517 build backend execution, and no concurrent writing to the shared package cache.
+Prior to commit `9fde04b`, all dependencies in [pyproject.toml](../../pyproject.toml) were pre-compiled wheels fetched from PyPI or NVIDIA's index. When `uv run` was invoked on a compute node, `uv` only read static binary wheels from the cache. There was **no source compilation**, no PEP 517 build backend execution, and no concurrent writing to the shared package cache.
 
 In commit `9fde04b`, `fast-tritopic` was added as an **editable local path dependency**:
 ```toml
@@ -60,7 +60,7 @@ In commit `9fde04b`, `fast-tritopic` was added as an **editable local path depen
 fast-tritopic = { path = "../fast-tritopic", editable = true }
 ```
 
-In the SLURM submission script ([queue_exp.sh](../scripts/pipelines/slurm/queue_exp.sh)), every job sets up an isolated workspace:
+In the SLURM submission script ([queue_exp.sh](../../scripts/pipelines/slurm/queue_exp.sh)), every job sets up an isolated workspace:
 ```bash
 JOB_SCRATCH_ROOT="$SCRATCH/job_${SLURM_JOB_ID}"
 JOB_SCRATCH="${JOB_SCRATCH_ROOT}/${PROJECT_NAME}"
@@ -88,7 +88,7 @@ Because each SLURM job has a unique `$SLURM_JOB_ID`:
 
 ## 4. The Virtual Environment I/O Bottleneck
 
-In [queue_exp.sh](../scripts/pipelines/slurm/queue_exp.sh):
+In [queue_exp.sh](../../scripts/pipelines/slurm/queue_exp.sh):
 ```bash
 rsync -av --exclude='data/' --exclude='models/' --exclude='results/' --exclude='logs/' \
     --exclude='output/' --exclude='tables/' --exclude='.venv/' --exclude='.git/' \
@@ -108,7 +108,7 @@ Across 20 concurrent jobs, this triggers up to **200 GB of redundant file copies
 ## 5. Architectural Solution
 
 ### 5.1 Step 1: Remove `editable = true` in `pyproject.toml`
-Change `[tool.uv.sources]` in [pyproject.toml](../pyproject.toml) from:
+Change `[tool.uv.sources]` in [pyproject.toml](../../pyproject.toml) from:
 ```toml
 [tool.uv.sources]
 fast-tritopic = { path = "../fast-tritopic", editable = true }
@@ -121,7 +121,7 @@ fast-tritopic = { path = "../fast-tritopic" }
 * **Effect:** `uv` installs `fast_tritopic` as a clean, static package directly into `site-packages/fast_tritopic/`. It eliminates ephemeral `.pth` files and cross-job scratch path references.
 
 ### 5.2 Step 2: Symlink Pre-Built `.venv` in SLURM Scripts
-Rather than copying or rebuilding `.venv` on every job, the SLURM batch scripts ([queue_exp.sh](../scripts/pipelines/slurm/queue_exp.sh) and [queue_trump_experiments.sh](../scripts/pipelines/slurm/queue_trump_experiments.sh)) will symlink the pre-built, synchronized environment from `$HOME/${PROJECT_NAME}/.venv`:
+Rather than copying or rebuilding `.venv` on every job, the SLURM batch scripts ([queue_exp.sh](../../scripts/pipelines/slurm/queue_exp.sh) and [queue_trump_experiments.sh](../../scripts/pipelines/slurm/queue_trump_experiments.sh)) will symlink the pre-built, synchronized environment from `$HOME/${PROJECT_NAME}/.venv`:
 
 ```bash
 # Link pre-built virtual environment from HOME if available

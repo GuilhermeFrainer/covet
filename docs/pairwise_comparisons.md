@@ -2,11 +2,17 @@
 
 This proposal organizes model evaluation around explicit research claims and controlled pairwise comparisons. It records the repository inspection and design discussion from **2026-09-16**.
 
-**Status:** documentation of a proposal. The pipeline, registry, experiments, and fixes described here have not been implemented or scientifically approved. Writing these documents does not approve those changes.
+**Status (updated 2026-09-29):** partially implemented. A simplified, dashboard-level version exists:
+
+- [`config/rq1_presentation_edges.yaml`](../config/rq1_presentation_edges.yaml) is an explicit edge registry (a simpler schema than the [registry design](pairwise_registry_design.md)).
+- [`src/comparisons/analysis.py`](../src/comparisons/analysis.py) matches runs by seed and topic count and applies an exact Pratt signed-rank test with Holm adjustment.
+- [`config/model_catalog.yaml`](../config/model_catalog.yaml) records baseline–ablation correspondence (see the [model catalog guide](model_catalog.md)).
+
+The configuration and historical-run parity audit is **not** implemented, so no edge has earned "strict ablation" status. The remaining design in these documents is still a proposal and is not scientifically approved.
 
 ## Reading guide
 
-For the urgent repairs to existing experiments before the future comparison pipeline, read the [experiment integrity repair plan](experiment_integrity_repair_plan.md).
+The experiment repairs that preceded this pipeline are recorded in the archived [experiment integrity repair plan](archive/experiment_integrity_repair_plan.md).
 
 | Document | Read it to understand |
 | --- | --- |

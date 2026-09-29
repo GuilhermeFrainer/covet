@@ -3,9 +3,9 @@
 **Date:** 2026-09-16  
 **Status:** Implemented & Verified in Active Configurations  
 **Related Documents:**
-- [docs/EXPERIMENT_INTEGRITY_NEXT_STEPS.md](EXPERIMENT_INTEGRITY_NEXT_STEPS.md)
+- [docs/archive/EXPERIMENT_INTEGRITY_NEXT_STEPS.md](archive/EXPERIMENT_INTEGRITY_NEXT_STEPS.md)
 - [docs/REPOSITORY_ISSUES.md](REPOSITORY_ISSUES.md)
-- [docs/experiment_integrity_repair_plan.md](experiment_integrity_repair_plan.md)
+- [docs/archive/experiment_integrity_repair_plan.md](archive/experiment_integrity_repair_plan.md)
 - [docs/pairwise_repository_findings.md](pairwise_repository_findings.md)
 
 ---

@@ -6,8 +6,8 @@
 
 **Date:** 2026-09-16  
 **Status:** In Progress (Stages 1 and 2 completed; Stage 3 in progress)  
-**Parent Plan:** [docs/experiment_integrity_repair_plan.md](docs/experiment_integrity_repair_plan.md)  
-**Issue Tracking:** [REPOSITORY_ISSUES.md](REPOSITORY_ISSUES.md)
+**Parent Plan:** [docs/experiment_integrity_repair_plan.md](experiment_integrity_repair_plan.md)  
+**Issue Tracking:** [REPOSITORY_ISSUES.md](../REPOSITORY_ISSUES.md)
 
 ---
 
@@ -25,24 +25,24 @@ This document provides clear, actionable instructions for any agent or engineer 
   - Manually completed and preserved at `results/archive/pre_correction_2026-09-16.7z`.
   - Presentation materials and baseline tables for the advisor are securely frozen.
 - **Stage 3 (Configuration Mutation Fix): COMPLETED**
-  - Fixed in-place `.pop()` and parameter assignment mutation in `get_algorithm()` and model factory functions in [src/models.py](../src/models.py).
-  - Ensured multi-seed optimizer runs in [src/optimizer.py](../src/optimizer.py) pass deep copies to prevent state leakage across seeds.
-  - Added regression test suite in [tests/test_config_mutation_regression.py](../tests/test_config_mutation_regression.py).
+  - Fixed in-place `.pop()` and parameter assignment mutation in `get_algorithm()` and model factory functions in [src/models.py](../../src/models.py).
+  - Ensured multi-seed optimizer runs in [src/optimizer.py](../../src/optimizer.py) pass deep copies to prevent state leakage across seeds.
+  - Added regression test suite in [tests/test_config_mutation_regression.py](../../tests/test_config_mutation_regression.py).
 - **Stage 4 (BERTopic Defaults & 5D Dimensionality): COMPLETED**
   - Updated all 194 active standard UMAP-family YAML configurations to explicitly set `n_components: 5`, `n_neighbors: 15`, `min_dist: 0.0`, `metric: "cosine"`, `low_memory: false`.
   - Updated all 30 active HDBSCAN configurations to `prediction_data: true` and applied the dataset-specific `min_cluster_size` policy (5 for ANES/Gadarian, 10 for FED/Yelp, 30 for Trump).
   - Maintained 50 active PCA configurations at `n_components: 5` and added explicit fallback in `get_algorithm()`.
-  - Full documentation in [docs/bertopic_default_parameters_and_clustering_decisions.md](bertopic_default_parameters_and_clustering_decisions.md) and parity test suite in [tests/test_bertopic_defaults_parity.py](../tests/test_bertopic_defaults_parity.py).
+  - Full documentation in [docs/bertopic_default_parameters_and_clustering_decisions.md](../bertopic_default_parameters_and_clustering_decisions.md) and parity test suite in [tests/test_bertopic_defaults_parity.py](../../tests/test_bertopic_defaults_parity.py).
 - **Stage 5 (Run Provenance & Metadata Recording): COMPLETED**
-  - Implemented [src/run_provenance.py](../src/run_provenance.py) capturing 20 provenance attributes: `result_schema_version`, `campaign_id` (`"bertopic_defaults_v2"`), `run_status`, `dim_red_output_dim`, `dim_red_n_components`, `dim_red_n_neighbors`, `dim_red_metric`, `dim_red_min_dist`, `dim_red_low_memory`, `cluster_min_cluster_size`, `cluster_min_samples`, `cluster_metric`, `cluster_selection_method`, `cluster_prediction_data`, `normalize_text_view`, `resolved_config_hash`, `run_manifest_path`, `code_revision`, `code_dirty`, `dependency_lock_hash`.
-  - Integrated provenance collection and lightweight JSON run manifests into [src/optimizer.py](../src/optimizer.py) and the now-removed legacy runner.
+  - Implemented [src/run_provenance.py](../../src/run_provenance.py) capturing 20 provenance attributes: `result_schema_version`, `campaign_id` (`"bertopic_defaults_v2"`), `run_status`, `dim_red_output_dim`, `dim_red_n_components`, `dim_red_n_neighbors`, `dim_red_metric`, `dim_red_min_dist`, `dim_red_low_memory`, `cluster_min_cluster_size`, `cluster_min_samples`, `cluster_metric`, `cluster_selection_method`, `cluster_prediction_data`, `normalize_text_view`, `resolved_config_hash`, `run_manifest_path`, `code_revision`, `code_dirty`, `dependency_lock_hash`.
+  - Integrated provenance collection and lightweight JSON run manifests into [src/optimizer.py](../../src/optimizer.py) and the now-removed legacy runner.
   - Enforced campaign isolation on resumption and diagonal merging in `Optimizer.save_results()`.
-  - Protected table generators in [src/make_table.py](../src/make_table.py) so provenance columns are excluded from metric calculations.
-  - Unit and integration tests in [tests/test_run_provenance.py](../tests/test_run_provenance.py).
+  - Protected table generators in [src/make_table.py](../../src/make_table.py) so provenance columns are excluded from metric calculations.
+  - Unit and integration tests in [tests/test_run_provenance.py](../../tests/test_run_provenance.py).
 - **Stage 6 (Full-Precision Storage, Unchanged Display Precision): COMPLETED**
   - Removed `float_precision=decimal_digits` truncation from `Optimizer.save_results()`, preserving full `Float64` precision in CSV storage across all model runners.
   - Preserved display formatting at 3 decimals in publication outputs (`float_format="%.3f"` in LaTeX, `decimals=3` in Great Tables).
-  - Verified full-precision round-trip serialization and formatting stability in [tests/test_run_provenance.py](../tests/test_run_provenance.py).
+  - Verified full-precision round-trip serialization and formatting stability in [tests/test_run_provenance.py](../../tests/test_run_provenance.py).
 - **Stage 7 (Validation & Controlled Rollout): IN PROGRESS**
 
 ---
@@ -93,9 +93,9 @@ Guarantee that every future experiment run persists its effective runtime config
      - `campaign_id`: e.g., `"bertopic_defaults_v2"`.
      - `code_revision`: git commit SHA and dirty state.
 2. **Update Result CSV Output & Run Manifest:**
-   - In [src/training.py](src/training.py) and [src/optimizer.py](src/optimizer.py), include provenance fields in the metric dictionary saved to CSV.
+   - In [src/training.py](../../src/training.py) and [src/optimizer.py](../../src/optimizer.py), include provenance fields in the metric dictionary saved to CSV.
    - Write a lightweight JSON run manifest alongside qualitative topic outputs.
-3. **Protect Table Generation ([src/make_table.py](src/make_table.py)):**
+3. **Protect Table Generation ([src/make_table.py](../../src/make_table.py)):**
    - Ensure table generation utilities (`generate_gt_table`, `export_latex_table`) filter out provenance columns so they are not mistaken for floating-point evaluation metrics.
 
 ---
@@ -107,10 +107,10 @@ Preserve full floating-point accuracy in CSV storage while retaining standard 3-
 
 #### Actionable Steps:
 1. **Remove CSV Float Truncation:**
-   - In [src/optimizer.py](src/optimizer.py), remove `float_precision=3` from `Optimizer.save_results()` when calling `write_csv()`.
-   - Check all result writers in [src/training.py](src/training.py) and [src/optimizer.py](../src/optimizer.py) to ensure unrounded `Float64` metrics are written.
+   - In [src/optimizer.py](../../src/optimizer.py), remove `float_precision=3` from `Optimizer.save_results()` when calling `write_csv()`.
+   - Check all result writers in [src/training.py](../../src/training.py) and [src/optimizer.py](../../src/optimizer.py) to ensure unrounded `Float64` metrics are written.
 2. **Preserve Presentation Precision:**
-   - Leave `float_format="%.3f"` in LaTeX exporters and `decimals=3` in Great Tables formatters unchanged in [src/make_table.py](src/make_table.py).
+   - Leave `float_format="%.3f"` in LaTeX exporters and `decimals=3` in Great Tables formatters unchanged in [src/make_table.py](../../src/make_table.py).
 
 ---
 
@@ -140,7 +140,7 @@ Run complete verification across test suites, code standards, and establish the 
 ---
 
 ## 3. Important Architectural Constraints
-- **Preserve Preprocessing Parity:** All text cleaning and stemming must occur in Python ([src/processing.py](src/processing.py)).
+- **Preserve Preprocessing Parity:** All text cleaning and stemming must occur in Python ([src/processing.py](../../src/processing.py)).
 - **Strict Row Alignment:** Retain documents only if non-empty in both `clean_text` and `clean_text_stemmed`.
 - **Representation Stopwords Policy:** Filter stop words at the c-TF-IDF representation layer (`CountVectorizer(stop_words="english")`) rather than embedding input text.
 - **Campaign Isolation:** Never merge corrected `bertopic_defaults_v2` runs into legacy pre-correction CSVs.

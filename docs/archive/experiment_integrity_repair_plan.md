@@ -8,7 +8,7 @@
 
 The baseline must use **BERTopic's defaults**, rather than the defaults of independently constructed UMAP/HDBSCAN objects. The user previously said they would fix baseline dimensionality. Coordinate that work with this plan and with the other agent integrating MV-HDBSCAN; inspect the current diff before editing shared files.
 
-Tracking: [root issue checklist](../REPOSITORY_ISSUES.md). Background: [repository findings](pairwise_repository_findings.md).
+Tracking: [root issue checklist](../REPOSITORY_ISSUES.md). Background: [repository findings](../pairwise_repository_findings.md).
 
 ## Outcomes required
 
@@ -204,7 +204,7 @@ Required checks:
 - Repeated construction over three seeds without mutation, including new HDBSCAN wrappers.
 - CSV precision, metadata schema, backward-compatible legacy reads, campaign-isolated resume/merge, and unchanged display precision.
 - Archive manifest/integrity checks and an advisor snapshot read test.
-- Full `uv run pytest` and repository Ruff checks/formatting required by [GEMINI.md](../GEMINI.md), preserving other agents' work.
+- Full `uv run pytest` and repository Ruff checks/formatting required by [GEMINI.md](../../GEMINI.md), preserving other agents' work.
 
 Only after these pass, propose a concrete rerun matrix by dataset/model/seed/topic count. Standard UMAP-family runs need corrected versions for claims about the intended 5-dimensional architecture; HDBSCAN parameter changes may affect additional cells. PCA's 5-dimensional runs are not invalidated solely by this dimensionality finding. Reuse old runs only with adequate identity/normalization evidence; do not require blanket retraining of unaffected models.
 

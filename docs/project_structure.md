@@ -14,7 +14,9 @@ The top-level `batch/` directory has been removed, and its contents have been re
 │   │   ├── align_yelp_sample.py
 │   │   ├── build_datasets.py
 │   │   ├── generate_embeddings.py
+│   │   ├── generate_stemmed_configs.py
 │   │   ├── preprocess_datasets.py
+│   │   ├── sample_yelp_interim.py
 │   │   └── summarize_datasets.py
 │   │
 │   ├── experiments/            # Core model training/execution entry points
@@ -24,9 +26,15 @@ The top-level `batch/` directory has been removed, and its contents have been re
 │   │   └── run_stm.py
 │   │
 │   ├── analysis/               # Results evaluation and verification utilities
+│   │   ├── calculate_noise_coverage.py
 │   │   ├── calculate_total_time.py
+│   │   ├── check_missing_results.py
+│   │   ├── compare_stopword_impact.py
 │   │   ├── count_models.py
+│   │   ├── demsar_all_vs_all_analysis.py
+│   │   ├── demsar_delta_analysis.py
 │   │   ├── find_best_models.py
+│   │   ├── inspect_document_assignments.py
 │   │   └── merge_results.py
 │   │
 │   ├── r_scripts/              # R-specific execution scripts
@@ -34,7 +42,7 @@ The top-level `batch/` directory has been removed, and its contents have been re
 │   │   └── train_stm.R
 │   │
 │   ├── pipelines/              # Orchestrators and batch runner scripts
-│   │   ├── local_windows/      # Local Windows batch (.bat) and PowerShell (.ps1) [IGNORED]
+│   │   ├── local_windows/      # Local Windows PowerShell (.ps1) runners [TRACKED]
 │   │   ├── local_unix/         # Local Linux/macOS shell scripts (.sh) [IGNORED]
 │   │   └── slurm/              # Cluster/Slurm cluster scripts (.sh) [TRACKED]
 │   │
@@ -56,6 +64,8 @@ This directory contains scripts for data ingestion, cleaning, feature engineerin
 - **[generate_embeddings.py](../scripts/data_prep/generate_embeddings.py)**: Runs SentenceTransformers to compute document embeddings.
 - **[align_yelp_sample.py](../scripts/data_prep/align_yelp_sample.py)**: Subsamples the Yelp dataset to 10k documents while keeping exact alignment between BERTopic (chunked) and STM (un-chunked) document IDs.
 - **[summarize_datasets.py](../scripts/data_prep/summarize_datasets.py)**: Utility to output statistics (token counts, document numbers) about the processed datasets.
+- **[sample_yelp_interim.py](../scripts/data_prep/sample_yelp_interim.py)**: Samples 10,000 documents from the interim Yelp parquet data before preprocessing.
+- **[generate_stemmed_configs.py](../scripts/data_prep/generate_stemmed_configs.py)**: Generates the `experiments/<dataset>_stemmed/` YAML configurations from the standard ones.
 
 ### 2. Experiments ([scripts/experiments/](../scripts/experiments))
 Contains the batch dispatcher and experiment workers. Start experiment batches with [queue_exp.sh](../scripts/pipelines/slurm/queue_exp.sh).
@@ -70,6 +80,12 @@ Scripts for processing, evaluating, and compiling results.
 - **[merge_results.py](../scripts/analysis/merge_results.py)**: Consolidates and deduplicates results from individual experiment runs into merged files, with single-pass archiving and cleanup (see [merge_results_lifecycle.md](merge_results_lifecycle.md)).
 - **[calculate_total_time.py](../scripts/analysis/calculate_total_time.py)**: Analyzes time metrics from logs to determine model throughput and compute times.
 - **[count_models.py](../scripts/analysis/count_models.py)**: Summarizes completed model files.
+- **[calculate_noise_coverage.py](../scripts/analysis/calculate_noise_coverage.py)**: Calculates HDBSCAN noise-cluster coverage and exports it as LaTeX.
+- **[check_missing_results.py](../scripts/analysis/check_missing_results.py)**: Verifies experiment completeness and detects partial runs.
+- **[compare_stopword_impact.py](../scripts/analysis/compare_stopword_impact.py)**: Compares metrics between runs with and without representation stopword removal.
+- **[demsar_all_vs_all_analysis.py](../scripts/analysis/demsar_all_vs_all_analysis.py)**: Demšar (2006) all-vs-all comparisons: Friedman/Iman-Davenport, Nemenyi critical difference, and Holm-adjusted pairwise tests.
+- **[demsar_delta_analysis.py](../scripts/analysis/demsar_delta_analysis.py)**: Model-by-metric delta tables with exact Wilcoxon tests and Holm adjustment.
+- **[inspect_document_assignments.py](../scripts/analysis/inspect_document_assignments.py)**: Read-only inspection of exported per-document topic assignments and raw metadata (see [document_assignment_exports.md](document_assignment_exports.md)).
 
 ### 4. R Scripts ([scripts/r_scripts/](../scripts/r_scripts))
 Keeps R language scripts separated from the Python codebase.
@@ -78,7 +94,7 @@ Keeps R language scripts separated from the Python codebase.
 
 ### 5. Pipelines & Orchestration ([scripts/pipelines/](../scripts/pipelines))
 Consolidates sequential execution and batch runners.
-- **`local_windows/`**: Local Windows batch `.bat` scripts and PowerShell `.ps1` files. *Note: Ignored by git to allow local modification.*
+- **`local_windows/`**: Local Windows PowerShell `.ps1` runners (representation builds, STM image build, results sync and export). *Note: Tracked by git.*
 - **`local_unix/`**: Local shell scripts to fetch results. *Note: Ignored by git to allow local modification.*
 - **`slurm/`**: Production SLURM scripts to dispatch jobs to clusters (primary batch entry point: `queue_exp.sh`). *Note: Tracked by git for reproducibility.*
 

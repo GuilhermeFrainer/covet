@@ -1,10 +1,8 @@
 # Repository findings tracker
 
-Recorded on **2026-09-16**. Detailed evidence: [repository findings](docs/pairwise_repository_findings.md). Future comparison design: [proposal index](docs/pairwise_comparisons.md).
+Recorded on **2026-09-16**. Detailed evidence: [repository findings](pairwise_repository_findings.md). Future comparison design: [proposal index](pairwise_comparisons.md).
 
-**Implementation handoff:** [experiment integrity repair plan](docs/experiment_integrity_repair_plan.md) covers historical verification, all active UMAP/PCA specifications, BERTopic default alignment, advisor-ready archival, run metadata, full-precision CSVs, and normalization fixes. It records a plan, not completed repairs.
-
-Another agent is integrating MV-HDBSCAN concurrently. Recheck implementation status before acting; this checklist does not claim that fixes have been applied.
+**History:** the [experiment integrity repair plan](archive/experiment_integrity_repair_plan.md) and its [execution guide](archive/EXPERIMENT_INTEGRITY_NEXT_STEPS.md) are archived. Their completed repairs are marked resolved below; unchecked entries remain open.
 
 ## Confirmed issues
 
@@ -16,7 +14,7 @@ Another agent is integrating MV-HDBSCAN concurrently. Recheck implementation sta
 
 - [ ] **Match seed/topic-count grids before averaging.** Existing delta analysis averages available rows before matching; incomplete coverage can therefore compare different conditions. Completed individual runs are not invalid merely because other cells are missing.
 - [ ] **Keep sample identities separate.** Inspected Yelp results include 500-document and full-size runs (10,205 observations in inspected full-size rows). Their coexistence is fine; pooling them as the same sample is not. Resolve the intended canonical Yelp input and separate `yelp_s10000` artifacts.
-- [ ] **Review exact Wilcoxon handling.** Requesting SciPy `method="exact"` alone does not guarantee the required exact treatment of ties/zeros. The helper's exception-to-`p=1` fallback can conceal errors. This concerns statistical conclusions, not trained-model validity; it does not establish that every existing p-value is wrong. See the [statistical protocol](docs/pairwise_statistical_protocol.md).
+- [ ] **Review exact Wilcoxon handling.** Requesting SciPy `method="exact"` alone does not guarantee the required exact treatment of ties/zeros. The helper's exception-to-`p=1` fallback can conceal errors. This concerns statistical conclusions, not trained-model validity; it does not establish that every existing p-value is wrong. See the [statistical protocol](pairwise_statistical_protocol.md).
 
 ## Comparison limitations and interpretation
 

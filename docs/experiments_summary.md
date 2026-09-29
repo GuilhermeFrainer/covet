@@ -24,7 +24,7 @@ The benchmark spans five empirical datasets covering diverse document lengths, v
 * **Topic Counts ($K$ / $nr\_topics$ / $n\_clusters$)**: $5$ evaluation blocks: **`10, 20, 30, 40, 50`** topics.
 * **Runs per Complete Configuration**: $3\text{ seeds} \times 5\text{ topic counts} = \mathbf{15\text{ runs}}$ per model.
 * **Text Embeddings**: Standardized dense semantic representations via `all-MiniLM-L6-v2` ($d=384$) generated in Python with strict row alignment.
-* **Benchmark Size**: Over **2,945 individual model evaluations** consolidated into merged result files, plus recent decoupled multi-view experimental runs.
+* **Benchmark Size** (as of 2026-09-15): Over **2,945 individual model evaluations** consolidated into merged result files, plus recent decoupled multi-view experimental runs.
 
 ---
 
@@ -64,6 +64,8 @@ Evaluates View 0 (Text Embeddings) and View 1 (Metadata Covariates):
 * **`mv_spherical_k_means`**: Multi-View Spherical K-Means (Cosine distance on all views).
 * **`mv_spectral` & `mv_spectral_info0`**: Multi-View Spectral Clustering with co-training graph Laplacians.
 * **`mv_co_reg_spectral` & `mv_co_reg_spectral_info0`**: Co-regularized Multi-View Spectral Clustering (Kumar & Daume, enforces consensus across eigenvectors).
+* **`mv_hdbscan`**: Multi-View HDBSCAN from the sibling `MV-HDBSCAN` package (per-view scaling, `max` fusion) with baseline-matched UMAP and `nr_topics` settings. Primary ablation of `baseline` in [`config/model_catalog.yaml`](../config/model_catalog.yaml).
+* **`feature_stacking_hdbscan`**: HDBSCAN on standardized, horizontally stacked text and metadata views (`MV-HDBSCAN` package) with baseline-matched UMAP and `nr_topics` settings.
 
 ### 2.5 PCA + Multi-View Clustering
 * **`pca_mv_k_means`**, **`pca_mv_spherical_k_means`**, **`pca_mv_spectral`**, **`pca_mv_co_reg_spectral`**: Linear dimensionality reduction on text embeddings before multi-view clustering.

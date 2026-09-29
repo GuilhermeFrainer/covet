@@ -11,7 +11,7 @@ This project aims to modify BERTopic to incorporate document-level metadata into
 *   **Python:** 3.12+
 *   **Package Manager:** `uv`
 *   **R (Optional):** R >= 4.0 with `renv` (required only for building Bag-of-Words and training R-based STM models)
-*   **Local Dependencies:** `fast-tritopic` as a local path dependency (`../fast-tritopic`)
+*   **Local Dependencies:** `fast-tritopic` (`../fast-tritopic`) and `mv-hdbscan` (`../MV-HDBSCAN`) as local path dependencies, cloned next to this repository
 
 ### Installation
 
@@ -224,7 +224,7 @@ The dashboard enables:
 
 ## Running Tests
 
-The test suite contains 460+ unit and integration tests covering builders, models, config inheritance, and merge pipelines:
+The unit and integration test suite covers builders, models, config inheritance, the experiment queue, provenance, and merge pipelines:
 ```bash
 uv run pytest
 ```
@@ -234,16 +234,16 @@ uv run pytest
 ## Project Structure
 
 ```
+├── config/                    # Model catalog and RQ1 comparison-edge registry
 ├── data/                      # Raw, interim, and processed datasets (.parquet, .rds)
-├── docs/                      # Architectural guides and technical documentation
-│   ├── archived_experiments_summary.md
-│   ├── decoupled_multiview_distance_metrics.md
-│   ├── fast_tritopic_implementation_plan.md
-│   ├── merge_results_lifecycle.md
-│   ├── preprocessing.md
-│   ├── project_structure.md
-│   ├── representation_stopwords.md
-│   └── results_separation.md
+├── docs/                      # Current guides, decisions, and proposals
+│   ├── REPOSITORY_ISSUES.md   # Open issue tracker
+│   ├── experiments_summary.md # Experimental campaign and model taxonomy
+│   ├── model_catalog.md       # Model priorities and baseline–ablation mapping
+│   ├── pairwise_*.md          # Pairwise comparison proposal (partially implemented)
+│   ├── project_structure.md   # Script-level directory guide
+│   ├── ...                    # Preprocessing, stopwords, results separation, merging
+│   └── archive/               # Completed plans and resolved incidents (historical only)
 ├── experiments/               # Experiment configuration files
 │   ├── anes/                  # Active standard ANES configs
 │   ├── fed/                   # Active standard FED configs
@@ -267,21 +267,25 @@ uv run pytest
 │   └── dashboard.py           # Streamlit results dashboard
 ├── src/                       # Core Python library
 │   ├── builders/              # Dataset-specific ingestion builders
+│   ├── comparisons/           # Matched baseline-vs-ablation statistics for the dashboard
 │   ├── append_umap.py         # AppendUMAP dimension reduction wrapper
 │   ├── data.py                # Dataset loading and splitting
 │   ├── decoupled_kmeans.py    # Decoupled Multi-View K-Means implementations
 │   ├── decoupled_spectral.py  # Decoupled Multi-View Spectral clustering
+│   ├── document_assignments.py # Per-run document-topic assignment exports
 │   ├── embeddings.py          # SentenceTransformers embedding generation
 │   ├── evaluation.py          # Metric calculations (c_v, u_mass, irbo)
 │   ├── experiment_queue.py    # Experiment queue orchestration
 │   ├── experiment_tracker.py  # Experiment run tracking and persistence
 │   ├── logger_config.py       # Centralized logging configuration
 │   ├── make_table.py          # Great Tables & LaTeX table generators
+│   ├── model_catalog.py       # Loader/validator for config/model_catalog.yaml
 │   ├── models.py              # BERTopic, Multi-View, and TriTopic integrations
 │   ├── mvc_wrapper.py         # Multi-View Clustering wrappers
 │   ├── optimizer.py           # Hyperparameter optimization engine
 │   ├── processing.py          # Standardized text cleaning and stemming
 │   ├── results_analysis.py    # Results parsing and model type classification
+│   ├── run_provenance.py      # Effective-settings capture and run manifests
 │   ├── training.py            # Training routines
 │   ├── utils.py               # Config loading and helper utilities
 │   ├── verification.py        # Config and dataset verification tools

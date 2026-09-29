@@ -23,7 +23,7 @@ missing metrics as errors or partial errors, even when training completed.
 The evaluator can return a non-finite score without raising an exception, so
 the saved run can have `run_status: success` alongside `NaN` metrics.
 No SLURM explanation is needed for these completed runs' missing scores;
-the separate [SLURM investigation](slurm_fast_tritopic_concurrency_issue.md)
+the separate [SLURM investigation](archive/slurm_fast_tritopic_concurrency_issue.md)
 does not establish the cause of this issue.
 
 ## Cause: keyword and evaluation vocabulary mismatch
