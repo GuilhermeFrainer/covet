@@ -1,0 +1,25 @@
+extends: datasets/trump_s25000_stemmed.yaml
+experiment:
+  name: trump_s25000_stemmed_standard_tritopic
+  description: Standard TriTopic model (tri-modal graph topic modeling) on trump_s25000_stemmed
+    dataset with standard topic counts.
+  random_state:
+  - 36201624
+  - 62613654
+  - 57116123
+  decimal_digits: 3
+model:
+  id: tritopic
+  description: TriTopic multi-view graph topic model with consensus Leiden clustering.
+  type: tritopic
+  params:
+    verbose: false
+    keyword_ngram_range:
+    - 1
+    - 1
+    n_topics:
+    - 10
+    - 20
+    - 30
+    - 40
+    - 50

@@ -8,7 +8,7 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
 
-DATASETS = ["anes", "fed", "gadarian", "trump", "yelp"]
+DATASETS = ["anes", "fed", "gadarian", "trump", "trump_s25000", "yelp"]
 
 
 def main():

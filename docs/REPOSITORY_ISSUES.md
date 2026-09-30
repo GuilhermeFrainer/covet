@@ -15,7 +15,7 @@ Recorded on **2026-09-16**. Detailed evidence: [repository findings](pairwise_re
 ## Analysis concerns
 
 - [ ] **Match seed/topic-count grids before averaging.** Existing delta analysis averages available rows before matching; incomplete coverage can therefore compare different conditions. Completed individual runs are not invalid merely because other cells are missing.
-- [ ] **Keep sample identities separate.** Inspected Yelp results include 500-document and full-size runs (10,205 observations in inspected full-size rows). Their coexistence is fine; pooling them as the same sample is not. Resolve the intended canonical Yelp input and separate `yelp_s10000` artifacts.
+- [ ] **Keep sample identities separate.** Inspected Yelp results include 500-document and full-size runs (10,205 observations in inspected full-size rows). Their coexistence is fine; pooling them as the same sample is not. Resolve the intended canonical Yelp input and separate `yelp_s10000` artifacts. Analysis now reports only `yelp_s10000` under its base name (`DATASET_ALIASES` in [src/results_analysis.py](../src/results_analysis.py)); every other sample, such as `trump_s25000`, keeps its suffix (see [trump_downsampling.md](trump_downsampling.md)).
 - [ ] **Review exact Wilcoxon handling.** Requesting SciPy `method="exact"` alone does not guarantee the required exact treatment of ties/zeros. The helper's exception-to-`p=1` fallback can conceal errors. This concerns statistical conclusions, not trained-model validity; it does not establish that every existing p-value is wrong. See the [statistical protocol](pairwise_statistical_protocol.md).
 
 ## Comparison limitations and interpretation

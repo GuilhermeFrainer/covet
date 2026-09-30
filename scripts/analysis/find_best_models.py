@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.make_table import generate_best_models_latex_table
-from src.results_analysis import find_best_models
+from src.results_analysis import canonical_dataset_expr, find_best_models
 from src.visualization import (
     generate_cleveland_plot,
     generate_parallel_plot,
@@ -255,11 +255,7 @@ def main():
             # Filter by dataset early if possible
             if "dataset_name" in df.columns:
                 # Normalize dataset name
-                df = df.with_columns(
-                    pl.col("dataset_name")
-                    .replace("anes_stemmed", "anes")
-                    .str.replace(r"_s\d+$", "")
-                )
+                df = df.with_columns(canonical_dataset_expr(pl.col("dataset_name")))
                 df = df.filter(pl.col("dataset_name") == dataset)
                 if not df.is_empty():
                     all_dfs.append(df)

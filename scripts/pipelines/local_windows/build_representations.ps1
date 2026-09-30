@@ -18,15 +18,41 @@ Write-Host "==========================================================" -Foregro
 
 # Determine datasets to process
 if ($FullYelp) {
-    $datasets = @("fed", "anes", "gadarian", "trump", "yelp")
+    $datasets = @("fed", "anes", "gadarian", "trump", "trump_s25000", "yelp")
 } else {
-    $datasets = @("fed", "anes", "gadarian", "trump", "yelp_s10000")
+    $datasets = @("fed", "anes", "gadarian", "trump", "trump_s25000", "yelp_s10000")
 }
 
 foreach ($dataset in $datasets) {
     Write-Host "`n----------------------------------------------------------" -ForegroundColor Yellow
     Write-Host " Processing dataset: $dataset" -ForegroundColor Yellow
     Write-Host "----------------------------------------------------------" -ForegroundColor Yellow
+
+    # Sampled Trump reuses trump's preprocessing and embeddings (see
+    # docs/trump_downsampling.md), so only the sample and R objects are built.
+    if ($dataset -eq "trump_s25000") {
+        Write-Host "[1/3] Sampling 25k documents from processed Trump embeddings..." -ForegroundColor Gray
+        uv run python scripts/data_prep/sample_trump.py --n 25000
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to sample Trump 25k"
+            exit $LASTEXITCODE
+        }
+
+        Write-Host "[2/3] Building R BoW and STM representations (Unstemmed)..." -ForegroundColor Gray
+        Rscript scripts/r_scripts/build_bow.R --dataset $dataset --text_col clean_text
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to build unstemmed BoW for $dataset"
+            exit $LASTEXITCODE
+        }
+
+        Write-Host "[3/3] Building R BoW and STM representations (Stemmed)..." -ForegroundColor Gray
+        Rscript scripts/r_scripts/build_bow.R --dataset $dataset --text_col clean_text_stemmed --output_suffix _stemmed
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to build stemmed BoW for $dataset"
+            exit $LASTEXITCODE
+        }
+        continue
+    }
 
     # 1. Build dataset
     if ($dataset -eq "yelp_s10000") {

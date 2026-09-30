@@ -1,0 +1,31 @@
+extends: "datasets/trump_s25000.yaml"
+
+experiment:
+  name: "trump_s25000_standard_append_umap_mv_spherical_k_means"
+  description: "Append UMAP + Multi-View Spherical K-Means on trump_s25000 with standard topic counts."
+  random_state:
+    - 36201624
+    - 62613654
+    - 57116123
+  decimal_digits: 3
+
+model:
+  id: "append_umap_mv_spherical_k_means"
+  description: "Append UMAP + Multi-View Spherical K-Means"
+  dimensionality_reduction:
+    type: "append_umap"
+    params:
+      n_components: 5
+      n_neighbors: 15
+      min_dist: 0.0
+      metric: "cosine"
+      low_memory: false
+  clustering:
+    type: "multi_view_spherical_k_means"
+    params:
+      n_clusters:
+        - 10
+        - 20
+        - 30
+        - 40
+        - 50

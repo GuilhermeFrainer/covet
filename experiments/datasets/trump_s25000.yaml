@@ -1,0 +1,21 @@
+dataset_path: "data/processed/trump_s25000_embeddings.parquet"
+embedding_col: "clean_text_embedding"
+text_col: "clean_text"
+covariates:
+  numerical:
+    - log_favorites
+    - log_retweets
+    - date
+  categorical:
+    - device
+  binary:
+    - is_retweet
+    - is_deleted
+    - is_flagged
+coherence_metrics:
+  - u_mass
+  - c_v
+  - c_npmi
+diversity_metrics:
+  - irbo
+  - topic_diversity

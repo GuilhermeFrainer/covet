@@ -1,0 +1,25 @@
+extends: datasets/trump_s25000.yaml
+experiment:
+  name: trump_s25000_standard_pca_k_means
+  description: PCA + K-Means on trump_s25000 with standard topic counts.
+  random_state:
+  - 36201624
+  - 62613654
+  - 57116123
+  decimal_digits: 3
+model:
+  id: pca_k_means
+  description: PCA + K-Means
+  dimensionality_reduction:
+    type: pca
+    params:
+      n_components: 5
+  clustering:
+    type: k_means
+    params:
+      n_clusters:
+      - 10
+      - 20
+      - 30
+      - 40
+      - 50

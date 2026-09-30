@@ -1,5 +1,7 @@
 """Tests for experiment queue pure logic in src.experiment_queue."""
 
+from pathlib import Path
+
 import pytest
 
 from src.experiment_queue import (
@@ -13,6 +15,8 @@ from src.experiment_queue import (
     resolve_datasets,
     resolve_models,
 )
+
+EXPERIMENTS_DIR = Path(__file__).resolve().parents[1] / "experiments"
 
 
 class TestParseRunIndices:
@@ -280,6 +284,25 @@ class TestJobConstruction:
             in yelp_jobs[0].data_copy_command
         )
         assert "fed_embeddings.parquet data/processed/" in fed_jobs[0].data_copy_command
+
+    @pytest.mark.parametrize("use_stemmed", [False, True])
+    def test_trump_sample_keeps_its_own_data_and_configs(self, use_stemmed):
+        job = build_jobs(
+            datasets=["trump_s25000"],
+            models=["baseline"],
+            split=False,
+            model_indices=[1],
+            use_stemmed=use_stemmed,
+            keep_rep_stopwords=False,
+        )[0]
+        exp_dir = "trump_s25000_stemmed" if use_stemmed else "trump_s25000"
+        exp_target = f"{exp_dir}/trump_s25000_standard_baseline"
+
+        assert f"--exp {exp_target} " in job.run_command
+        assert (EXPERIMENTS_DIR / f"{exp_target}.yaml").exists()
+        assert job.data_copy_command.endswith(
+            "data/processed/trump_s25000_embeddings.parquet data/processed/"
+        )
 
     def test_resource_overrides(self):
         jobs = build_jobs(

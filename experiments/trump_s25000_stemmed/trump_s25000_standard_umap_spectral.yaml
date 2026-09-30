@@ -1,0 +1,31 @@
+extends: datasets/trump_s25000_stemmed.yaml
+experiment:
+  name: trump_s25000_stemmed_standard_umap_spectral
+  description: UMAP + Single-View Spectral Clustering on trump_s25000_stemmed with
+    standard topic counts.
+  random_state:
+  - 36201624
+  - 62613654
+  - 57116123
+  decimal_digits: 3
+model:
+  id: umap_spectral
+  description: UMAP + Single-View Spectral Clustering
+  dimensionality_reduction:
+    type: umap
+    params:
+      n_components: 5
+      n_neighbors: 15
+      min_dist: 0.0
+      metric: cosine
+      low_memory: false
+  clustering:
+    type: spectral_clustering
+    params:
+      n_init: 10
+      n_clusters:
+      - 10
+      - 20
+      - 30
+      - 40
+      - 50

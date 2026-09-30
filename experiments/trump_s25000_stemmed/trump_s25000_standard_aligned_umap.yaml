@@ -1,0 +1,33 @@
+extends: datasets/trump_s25000_stemmed.yaml
+experiment:
+  name: trump_s25000_stemmed_standard_aligned_umap
+  description: Aligned UMAP model on trump_s25000_stemmed with standard topic counts.
+  random_state:
+  - 36201624
+  - 62613654
+  - 57116123
+  decimal_digits: 3
+model:
+  id: aligned_umap
+  description: BERTopic with Aligned UMAP integration.
+  dimensionality_reduction:
+    type: aligned_umap
+    params:
+      n_components: 5
+      n_neighbors: 15
+      min_dist: 0.0
+      metric: cosine
+      low_memory: false
+  clustering:
+    type: hdbscan
+    params:
+      min_cluster_size: 30
+      prediction_data: true
+  bertopic:
+    params:
+      nr_topics:
+      - 10
+      - 20
+      - 30
+      - 40
+      - 50

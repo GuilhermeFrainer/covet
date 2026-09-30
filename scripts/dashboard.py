@@ -67,6 +67,7 @@ from src.comparisons.analysis import (
 )
 from src.results_analysis import (
     calculate_hdbscan_noise_coverage,
+    canonical_dataset_expr,
     compute_demsar_all_vs_all,
     compute_demsar_delta_table,
     compute_stopword_impact,
@@ -116,11 +117,7 @@ def load_all_results(results_dir: str = "results") -> pl.DataFrame:
 
             # Normalize dataset and model names early
             if "dataset_name" in df.columns:
-                df = df.with_columns(
-                    pl.col("dataset_name")
-                    .replace("anes_stemmed", "anes")
-                    .str.replace(r"_s\d+$", "")
-                )
+                df = df.with_columns(canonical_dataset_expr(pl.col("dataset_name")))
 
             if "model_name" in df.columns:
                 df = df.with_columns(pl.col("model_name").str.replace("^stemmed_", ""))

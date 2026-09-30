@@ -46,6 +46,8 @@ def test_stemmed_config_uses_stemmed_inputs():
         ("trump_stemmed/trump_standard_stm", "trump_stemmed"),
         ("yelp/yelp_standard_stm", "yelp_s10000"),
         ("yelp_stemmed/yelp_standard_stm", "yelp_s10000_stemmed"),
+        ("trump_s25000/trump_s25000_standard_stm", "trump_s25000"),
+        ("trump_s25000_stemmed/trump_s25000_standard_stm", "trump_s25000_stemmed"),
     ],
 )
 def test_active_stm_configs_match_build_bow_outputs(exp_name, expected_prefix):

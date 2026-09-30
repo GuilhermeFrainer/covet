@@ -1,0 +1,36 @@
+extends: "datasets/trump_s25000.yaml"
+
+experiment:
+  name: "trump_s25000_standard_append_umap_w010"
+  description: "Weighted Append UMAP (metadata share w=0.1) on trump_s25000 with standard topic counts."
+  random_state:
+    - 36201624
+    - 62613654
+    - 57116123
+  decimal_digits: 3
+
+model:
+  id: "append_umap_w010"
+  description: "BERTopic with weighted Append UMAP: L2-normalized text and calibrated metadata, metadata share w=0.1 of the mean squared distance."
+  dimensionality_reduction:
+    type: "append_umap"
+    params:
+      n_components: 5
+      n_neighbors: 15
+      min_dist: 0.0
+      metric: "euclidean"
+      low_memory: false
+      metadata_weight: 0.1
+  clustering:
+    type: "hdbscan"
+    params:
+      min_cluster_size: 30
+      prediction_data: true
+  bertopic:
+    params:
+      nr_topics:
+        - 10
+        - 20
+        - 30
+        - 40
+        - 50

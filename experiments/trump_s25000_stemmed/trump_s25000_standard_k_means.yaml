@@ -1,0 +1,29 @@
+extends: datasets/trump_s25000_stemmed.yaml
+experiment:
+  name: trump_s25000_stemmed_standard_k_means
+  description: UMAP + K-Means on trump_s25000_stemmed with standard topic counts.
+  random_state:
+  - 36201624
+  - 62613654
+  - 57116123
+  decimal_digits: 3
+model:
+  id: k_means
+  description: UMAP + K-Means
+  dimensionality_reduction:
+    type: umap
+    params:
+      n_components: 5
+      n_neighbors: 15
+      min_dist: 0.0
+      metric: cosine
+      low_memory: false
+  clustering:
+    type: k_means
+    params:
+      n_clusters:
+      - 10
+      - 20
+      - 30
+      - 40
+      - 50

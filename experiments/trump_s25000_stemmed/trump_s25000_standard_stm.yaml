@@ -1,0 +1,25 @@
+extends: datasets/trump_s25000_stemmed.yaml
+experiment:
+  name: trump_s25000_stemmed_standard_stm
+  random_state:
+  - 36201624
+  - 62613654
+  - 57116123
+  prevalence_formula: ~ log(favorites + 1) + log(retweets + 1) + date + as.factor(device)
+    + as.factor(is_retweet) + as.factor(is_deleted) + as.factor(is_flagged)
+models:
+- id: stm_k10
+  parameters:
+    k: 10
+- id: stm_k20
+  parameters:
+    k: 20
+- id: stm_k30
+  parameters:
+    k: 30
+- id: stm_k40
+  parameters:
+    k: 40
+- id: stm_k50
+  parameters:
+    k: 50

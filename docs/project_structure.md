@@ -16,6 +16,7 @@ The top-level `batch/` directory has been removed, and its contents have been re
 │   │   ├── generate_embeddings.py
 │   │   ├── generate_stemmed_configs.py
 │   │   ├── preprocess_datasets.py
+│   │   ├── sample_trump.py
 │   │   ├── sample_yelp_interim.py
 │   │   └── summarize_datasets.py
 │   │
@@ -63,6 +64,7 @@ This directory contains scripts for data ingestion, cleaning, feature engineerin
 - **[align_yelp_sample.py](../scripts/data_prep/align_yelp_sample.py)**: Subsamples the Yelp dataset to 10k documents while keeping exact alignment between BERTopic (chunked) and STM (un-chunked) document IDs.
 - **[summarize_datasets.py](../scripts/data_prep/summarize_datasets.py)**: Utility to output statistics (token counts, document numbers) about the processed datasets.
 - **[sample_yelp_interim.py](../scripts/data_prep/sample_yelp_interim.py)**: Samples 10,000 documents from the interim Yelp parquet data before preprocessing.
+- **[sample_trump.py](../scripts/data_prep/sample_trump.py)**: Samples a fixed subset (default 25,000 documents) of the preprocessed, embedded Trump dataset into `trump_s<n>` files (see [trump_downsampling.md](trump_downsampling.md)).
 - **[generate_stemmed_configs.py](../scripts/data_prep/generate_stemmed_configs.py)**: Generates the `experiments/<dataset>_stemmed/` YAML configurations from the standard ones.
 
 ### 2. Experiments ([scripts/experiments/](../scripts/experiments))

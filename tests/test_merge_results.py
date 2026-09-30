@@ -3,6 +3,7 @@ import sys
 import zipfile
 
 import polars as pl
+import pytest
 
 # Add project root to sys.path
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -20,10 +21,42 @@ from scripts.analysis.merge_results import (  # noqa: E402
 
 
 def test_normalize_dataset_name():
-    assert normalize_dataset_name("fed_s10000") == "fed"
     assert normalize_dataset_name("anes_stemmed") == "anes"
     assert normalize_dataset_name("trump") == "trump"
     assert normalize_dataset_name("") == ""
+
+
+def test_normalize_dataset_name_only_aliases_yelp_sample():
+    assert normalize_dataset_name("yelp_s10000") == "yelp"
+    assert normalize_dataset_name("yelp_s10000_stemmed") == "yelp"
+    assert normalize_dataset_name("trump_s25000") == "trump_s25000"
+    assert normalize_dataset_name("trump_s25000_stemmed") == "trump_s25000"
+    assert normalize_dataset_name("fed_s10000") == "fed_s10000"
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("trump_s25000_standard_baseline-20260930-120000-1234.csv", "standard"),
+        ("trump_s25000_stemmed_standard_stm-20260930-120000-1234.csv", "stemmed"),
+        ("trump_s25000_standard_merged.csv", "standard"),
+    ],
+)
+def test_get_dataset_info_keeps_sample_suffix(tmp_path, filename, expected):
+    f = tmp_path / filename
+    pl.DataFrame({"dataset_name": ["trump_s25000"], "c_v": [0.5]}).write_csv(f)
+
+    d_name, d_type = get_dataset_info(f)
+    assert d_name == "trump_s25000"
+    assert d_type == expected
+
+
+def test_get_dataset_info_yelp_sample_reports_as_yelp(tmp_path):
+    f = tmp_path / "yelp_standard_stm-20260930-120000-1234.csv"
+    pl.DataFrame({"dataset_name": ["yelp_s10000"], "c_v": [0.5]}).write_csv(f)
+
+    d_name, _ = get_dataset_info(f)
+    assert d_name == "yelp"
 
 
 def test_get_dataset_info_stemmed(tmp_path):

@@ -6,6 +6,26 @@ import scipy.stats as scipy_stats
 
 METRICS = ["u_mass", "c_v", "c_npmi", "irbo", "topic_diversity"]
 
+# Dataset names that report under another name. Yelp's 10k sample is the only
+# sampled dataset reported as its full dataset; every other sample (e.g.
+# trump_s25000) keeps its suffix so it never pools with full-corpus results.
+DATASET_ALIASES = {
+    "anes_stemmed": "anes",
+    "yelp_s10000": "yelp",
+}
+
+
+def canonical_dataset_expr(expr: pl.Expr) -> pl.Expr:
+    """Maps a dataset-name expression onto its reporting name.
+
+    Args:
+        expr: A Polars string expression holding dataset names.
+
+    Returns:
+        The expression with aliased dataset names replaced.
+    """
+    return expr.replace(DATASET_ALIASES)
+
 
 def extract_model_type(model_name: str, merge_info0: bool = False) -> str:
     """Extracts the base model type from a model name.
@@ -73,11 +93,7 @@ def find_best_models(
     """
     # Normalize dataset name and model names
     if "dataset_name" in df.columns:
-        df = df.with_columns(
-            pl.col("dataset_name")
-            .replace("anes_stemmed", "anes")
-            .str.replace(r"_s\d+$", "")
-        )
+        df = df.with_columns(canonical_dataset_expr(pl.col("dataset_name")))
 
     if "model_name" in df.columns:
         df = df.with_columns(pl.col("model_name").str.replace("^stemmed_", ""))
@@ -339,11 +355,7 @@ def compute_stopword_impact(
     # Standardize dataset column if present
     for df in [df_standard, df_no_stopword]:
         if "dataset_name" in df.columns:
-            df = df.with_columns(
-                pl.col("dataset_name")
-                .replace("anes_stemmed", "anes")
-                .str.replace(r"_s\d+$", "")
-            )
+            df = df.with_columns(canonical_dataset_expr(pl.col("dataset_name")))
 
     if "dataset_name" in df_standard.columns:
         df_standard = df_standard.filter(pl.col("dataset_name") == dataset)
@@ -671,11 +683,9 @@ def compute_demsar_delta_table(
 
     for idx, df_ref in enumerate([std_df, alt_df]):
         if "dataset_name" in df_ref.columns:
-            cleaned_ds = (
-                df_ref["dataset_name"]
-                .replace("anes_stemmed", "anes")
-                .str.replace(r"_s\d+$", "")
-            )
+            cleaned_ds = df_ref.select(
+                canonical_dataset_expr(pl.col("dataset_name"))
+            ).to_series()
             if idx == 0:
                 std_df = std_df.with_columns(cleaned_ds.alias("dataset_name"))
             else:
@@ -1306,9 +1316,7 @@ def compute_demsar_all_vs_all(
         combined_df = combined_df.with_columns(pl.lit("dataset").alias("dataset_name"))
     else:
         combined_df = combined_df.with_columns(
-            pl.col("dataset_name")
-            .replace("anes_stemmed", "anes")
-            .str.replace(r"_s\d+$", "")
+            canonical_dataset_expr(pl.col("dataset_name"))
         )
 
     target_ds = datasets if datasets is not None else dataset

@@ -81,7 +81,8 @@ main <- function() {
         
         file_name <- file_mapping[[opt$dataset]]
         if (is.null(file_name)) {
-            stop(paste("Unknown dataset:", opt$dataset, ". Please provide --input path."))
+            # Sampled datasets (e.g. trump_s25000) follow the same naming convention
+            file_name <- paste0(opt$dataset, "_processed.parquet")
         }
         input_path <- here::here("data", "interim", file_name)
     } else {

@@ -1,0 +1,26 @@
+extends: datasets/trump_s25000_stemmed.yaml
+experiment:
+  name: trump_s25000_stemmed_standard_pca_mv_co_reg_spectral
+  description: PCA + Multi-View Co-Regularized Spectral Clustering on trump_s25000_stemmed
+    with standard topic counts.
+  random_state:
+  - 36201624
+  - 62613654
+  - 57116123
+  decimal_digits: 3
+model:
+  id: pca_mv_co_reg_spectral
+  description: PCA + Multi-View Co-Regularized Spectral Clustering
+  dimensionality_reduction:
+    type: pca
+    params:
+      n_components: 5
+  clustering:
+    type: co_regularized_multi_view_spectral_clustering
+    params:
+      n_clusters:
+      - 10
+      - 20
+      - 30
+      - 40
+      - 50

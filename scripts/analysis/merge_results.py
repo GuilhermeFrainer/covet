@@ -18,18 +18,32 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import src.logger_config as logger_config
+from src.results_analysis import DATASET_ALIASES
 from src.verification import verify_dataset_completeness
 
 LOG_DIR = PROJECT_ROOT / "logs"
 
 
 def normalize_dataset_name(name: str) -> str:
-    """Strips sampling suffixes like _s10000 and _stemmed from the dataset name."""
+    """Strips the _stemmed suffix and applies dataset reporting aliases.
+
+    Sample suffixes such as _s25000 are kept, so sampled datasets merge
+    separately from their full corpus. Only aliases in DATASET_ALIASES
+    (e.g. yelp_s10000 -> yelp) are reported under another name.
+    """
     if not name:
         return name
-    name = re.sub(r"_s\d+$", "", name)
     name = re.sub(r"_stemmed$", "", name)
-    return name
+    return DATASET_ALIASES.get(name, name)
+
+
+def dataset_prefix(identifier: str) -> str:
+    """Extracts the dataset name from the start of an experiment id or stem.
+
+    Example: 'trump_s25000_standard_baseline' -> 'trump_s25000',
+    'fed_stemmed_standard_stm' -> 'fed'.
+    """
+    return re.match(r"[^_]*(?:_s\d+(?=_|$))?", identifier).group(0)
 
 
 def normalize_timestamp(ts: Any) -> str:
@@ -81,9 +95,9 @@ def get_dataset_info(
 
     candidate_name = None
     if exp_id:
-        candidate_name = exp_id.split("_")[0]
+        candidate_name = dataset_prefix(exp_id)
     elif parts and parts[0]:
-        candidate_name = parts[0]
+        candidate_name = dataset_prefix(stem)
 
     if candidate_name:
         is_stemmed = "stemmed" in filename_lower

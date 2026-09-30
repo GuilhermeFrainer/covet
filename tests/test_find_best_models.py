@@ -162,6 +162,25 @@ def test_find_best_models_stemmed_normalization():
     assert extract_model_type("stemmed_baseline_1") == "baseline"
 
 
+def test_find_best_models_keeps_samples_apart_except_yelp():
+    df = pl.DataFrame(
+        {
+            "model_name": ["baseline_1", "baseline_2", "baseline_3"],
+            "dataset_name": ["trump", "trump_s25000", "yelp_s10000"],
+            "c_v": [0.5, 0.9, 0.7],
+        }
+    )
+
+    trump_best = find_best_models(df, "trump")["c_v"]
+    assert trump_best["best_model_name"].to_list() == ["baseline_1"]
+
+    sample_best = find_best_models(df, "trump_s25000")["c_v"]
+    assert sample_best["best_model_name"].to_list() == ["baseline_2"]
+
+    yelp_best = find_best_models(df, "yelp")["c_v"]
+    assert yelp_best["best_model_name"].to_list() == ["baseline_3"]
+
+
 def test_find_best_models_average_std():
     data = {
         "model_name": ["baseline_seed1", "baseline_seed2", "baseline_seed3"],

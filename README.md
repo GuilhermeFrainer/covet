@@ -37,7 +37,7 @@ The project supports five core datasets:
 *   `anes`: American National Election Studies open-ended survey responses with political covariates.
 *   `fed`: Federal Reserve communications linked with macroeconomic indicators and political party metadata.
 *   `gadarian`: Open-ended responses regarding public health and emotion with demographic covariates.
-*   `trump`: Social media posts linked with engagement and timestamp metadata.
+*   `trump` / `trump_s25000`: Social media posts linked with engagement and timestamp metadata (`trump_s25000` is a fixed 25k-document sample for the heaviest models, reported separately from full Trump; see [docs/trump_downsampling.md](docs/trump_downsampling.md)).
 *   `yelp` / `yelp_s10000`: Business reviews joined with business metadata and star ratings (subsampled to 10k aligned documents for parity with STM).
 
 ### Standardized Multi-Stage Data Pipeline
@@ -53,6 +53,7 @@ To eliminate confounding between models, **all text preprocessing is executed 10
     ```bash
     uv run scripts/data_prep/align_yelp_sample.py
     ```
+    Trump is sampled after step 4 instead, from its finished embeddings, with `uv run python scripts/data_prep/sample_trump.py --n 25000`; then run step 5 with `--dataset trump_s25000`.
 
 3.  **Preprocess Text (Dual Representation):**
     Generates both `clean_text` (unstemmed, casing/syntax preserved for SentenceTransformers) and `clean_text_stemmed` (lowercased, NLTK stopwords removed, Snowball stemmed for classical BoW/STM models), enforcing strict row alignment:
