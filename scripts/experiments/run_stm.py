@@ -29,6 +29,31 @@ LOG_DIR = PROJECT_ROOT / "logs"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 MODELS_DIR = PROJECT_ROOT / "models"
 
+STEMMED_TEXT_COL = "clean_text_stemmed"
+
+
+def resolve_stm_inputs(experiment_config: dict) -> tuple[str, Path, Path]:
+    """Resolves the dataset name and STM input files for an experiment.
+
+    The stemmed and unstemmed variants of a dataset share one embeddings file,
+    so the preprocessing level is taken from ``text_col``. STM must train on
+    the same preprocessing level as the models it is compared against.
+
+    Args:
+        experiment_config: The ``experiment`` section of a loaded config.
+
+    Returns:
+        A tuple of (dataset_name, rds_path, bow_path).
+    """
+    dataset_name = Path(experiment_config["dataset_path"]).stem.replace(
+        "_embeddings", ""
+    )
+    is_stemmed = experiment_config.get("text_col") == STEMMED_TEXT_COL
+    file_prefix = f"{dataset_name}_stemmed" if is_stemmed else dataset_name
+    rds_path = PROJECT_ROOT / f"data/processed/{file_prefix}_stm_data.rds"
+    bow_path = PROJECT_ROOT / f"data/processed/{file_prefix}_bow.parquet"
+    return dataset_name, rds_path, bow_path
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run STM experiments.")
@@ -90,12 +115,10 @@ def main():
             )
 
         # 2. Dataset Path and Metadata
-        dataset_path = Path(config["experiment"]["dataset_path"])
-        dataset_name = dataset_path.stem.replace("_embeddings", "")
-        rds_path = PROJECT_ROOT / f"data/processed/{dataset_name}_stm_data.rds"
-        bow_path = PROJECT_ROOT / f"data/processed/{dataset_name}_bow.parquet"
+        dataset_name, rds_path, bow_path = resolve_stm_inputs(config["experiment"])
 
         logger.info(f"Dataset name: {dataset_name}")
+        logger.info(f"Text column: {config['experiment'].get('text_col')}")
         logger.info(f"RDS path: {rds_path}")
         logger.info(f"BoW path: {bow_path}")
 

@@ -139,11 +139,13 @@ By default, BERTopic's c-TF-IDF representation layer removes English stop words 
 To run Structural Topic Model baselines via R:
 ```bash
 # Standard unstemmed STM
-uv run python scripts/experiments/run_stm.py --dataset fed
+uv run python scripts/experiments/run_stm.py --exp fed/fed_standard_stm
 
 # Stemmed STM
-uv run python scripts/experiments/run_stm.py --dataset fed --stemmed
+uv run python scripts/experiments/run_stm.py --exp fed_stemmed/fed_standard_stm
 ```
+
+STM trains on the same preprocessing level as the models it is compared against: configs with `text_col: clean_text_stemmed` load `<dataset>_stemmed_stm_data.rds` and `<dataset>_stemmed_bow.parquet`, and all others load the unstemmed files.
 
 ### Running Hyperparameter Optimization
 
