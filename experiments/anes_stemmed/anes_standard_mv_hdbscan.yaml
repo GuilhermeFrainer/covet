@@ -1,17 +1,17 @@
 extends: datasets/anes_stemmed.yaml
 experiment:
-  name: anes_stemmed_standard_baseline
-  description: Standard baseline model (simplified UMAP + HDBSCAN) on anes_stemmed
-    with standard topic counts.
+  name: anes_stemmed_standard_mv_hdbscan
+  description: Multi-View HDBSCAN with baseline-matched UMAP dimensions and topic-count
+    targets on anes_stemmed.
   random_state:
   - 36201624
   - 62613654
   - 57116123
   decimal_digits: 3
 model:
-  id: baseline
-  description: 'Standard BERTopic: no metadata and default hyperparameters (simplified
-    config).'
+  id: mv_hdbscan
+  description: BERTopic with Multi-View HDBSCAN and the dataset baseline UMAP and
+    topic-count settings.
   is_baseline: false
   dimensionality_reduction:
     type: umap
@@ -19,13 +19,13 @@ model:
       n_components: 5
       n_neighbors: 15
       min_dist: 0.0
-      metric: "cosine"
+      metric: cosine
       low_memory: false
   clustering:
-    type: "multi_view_hdbscan"
+    type: multi_view_hdbscan
     params:
       min_cluster_size: 5
-      fusion: "max"
+      fusion: max
       scale_views: true
   bertopic:
     params:

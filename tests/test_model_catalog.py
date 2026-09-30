@@ -45,7 +45,8 @@ def test_scope_keeps_reference_and_explicit_external_baselines(catalog):
     selected = filter_catalog(df, baselines=["baseline"])
     weighted_append = {f"append_umap_w{w}" for w in ("000", "005", "010", "020", "030", "050")}
     assert set(selected["catalog_id"]) == {
-        "baseline", "append_umap", "aligned_umap", "mv_hdbscan", *weighted_append
+        "baseline", "append_umap", "aligned_umap", "mv_hdbscan",
+        "feature_stacking_hdbscan", *weighted_append
     }
     selected = filter_catalog(df, families=["spectral"], include_external=True)
     assert {"stm", "tritopic", "fast_tritopic", "umap_spectral"} <= set(selected["catalog_id"])

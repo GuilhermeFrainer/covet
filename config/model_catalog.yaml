@@ -163,6 +163,14 @@ models:
     baseline_id: null
     reduction: none
     clustering: none
+  feature_stacking_hdbscan:
+    label: UMAP + Feature-Stacking HDBSCAN
+    priority: primary
+    role: ablation
+    family: hdbscan
+    baseline_id: baseline
+    reduction: umap
+    clustering: feature_stacking_hdbscan
   k_means:
     label: UMAP + K-Means
     priority: secondary

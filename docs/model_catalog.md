@@ -9,7 +9,7 @@ runnable experiment configurations. No experiments or results need to be moved.
 
 | Reference baseline | Primary ablations |
 | --- | --- |
-| `baseline`: UMAP + HDBSCAN | UMAP + MV-HDBSCAN; Append UMAP + HDBSCAN; Aligned UMAP + HDBSCAN |
+| `baseline`: UMAP + HDBSCAN | UMAP + MV-HDBSCAN; UMAP + Feature-Stacking HDBSCAN; Append UMAP + HDBSCAN; Aligned UMAP + HDBSCAN |
 | `umap_spectral`: UMAP + Spectral | UMAP + MV Spectral, including co-regularized, `info0`, normalization, and decoupled variants |
 | `pca_k_means`: PCA + K-Means | PCA + MV K-means variants, including spherical K-means |
 
