@@ -225,9 +225,11 @@ models:
     short_label: "Co-Reg. MV Spectral"
     latex_label: '$\text{\systemshort}_1$'
     change: "Replaces single-view spectral clustering with co-regularized multi-view spectral clustering over the text and metadata views."
+  # mvlearn's co-regularized clustering ignores info_view, so this is the same
+  # model as mv_co_reg_spectral. Kept so archived results stay classified.
   mv_co_reg_spectral_info0:
     label: Multi-View Co-Regularized Spectral Clustering (info_view=0)
-    priority: primary
+    priority: secondary
     role: ablation
     family: spectral
     baseline_id: umap_spectral
@@ -235,7 +237,7 @@ models:
     clustering: co_regularized_multi_view_spectral_clustering
     short_label: "Co-Reg. MV Spectral (info_view = 0)"
     latex_label: '$\text{\systemshort}_1\text{-info0}$'
-    change: "As Co-Reg. MV Spectral, but the final clustering uses the text view's embedding only."
+    change: "Same as Co-Reg. MV Spectral: mvlearn's co-regularized clustering ignores info_view."
   mv_hdbscan:
     label: UMAP + MV-HDBSCAN
     priority: primary

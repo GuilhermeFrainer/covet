@@ -6,7 +6,7 @@
 # ==============================================================================
 
 # Models to run
-MODELS=("aligned_umap" "append_umap" "baseline" "fast_tritopic" "mv_co_reg_spectral" "mv_co_reg_spectral_info0" "mv_spectral" "mv_spectral_info0" "tritopic" "umap_spectral")
+MODELS=("aligned_umap" "append_umap" "baseline" "fast_tritopic" "mv_co_reg_spectral" "mv_spectral" "mv_spectral_info0" "tritopic" "umap_spectral")
 
 # Ensure slurm log directory exists
 mkdir -p slurm_log

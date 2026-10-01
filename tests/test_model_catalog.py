@@ -27,7 +27,7 @@ def test_agreed_primary_boundaries(catalog):
     primary = {
         "baseline", "append_umap", "aligned_umap", "mv_hdbscan",
         "umap_spectral", "mv_spectral", "mv_spectral_info0",
-        "mv_co_reg_spectral", "mv_co_reg_spectral_info0", "pca_k_means",
+        "mv_co_reg_spectral", "pca_k_means",
         "pca_mv_k_means", "pca_mv_spherical_k_means", "stm", "tritopic", "fast_tritopic",
     }
     assert all(catalog[mid]["priority"] == "primary" for mid in primary)

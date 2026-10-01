@@ -63,7 +63,12 @@ These are dataset-level paired deltas: each variant minus its reference, matched
 
 ## 3. Data sanity checks (do before generating tables)
 
-- [ ] **Co-Reg vs Co-Reg info0 give identical partitions.** All 45 matched runs have the same topic and outlier counts, and 22 of 45 have identical C_V. Does `info_view` have any effect for co-reg, or do the configs collapse to the same model? Present only one until resolved.
+- [x] **Co-Reg vs Co-Reg info0 give identical partitions.** *(Resolved 2026-10-01: they are the same model.)*
+  - mvlearn's `MultiviewCoRegSpectralClustering` accepts `info_view` (inherited from `MultiviewSpectralClustering.__init__`), but its `fit` never reads it: it always clusters the stacked eigenvectors of all views (`np.hstack(U_mats)`). Plain MV Spectral does use it (`embedding_ = U_mats[info_view]`), so `mv_spectral_info0` is a genuine variant.
+  - Evidence: on Fed, all 15 paired runs have identical document assignments (ARI = 1.0). Across ANES, Fed and Gadarian, all 45 pairs have identical topic words.
+  - The stored scores differ only where topics were padded (ANES 15/15 pairs, Gadarian 8/15, Fed 0/15), because `random.choices` was unseeded. Padding noise alone moved C_V by up to 0.029 for identical topics, which is evidence for the evaluation-change disclosure.
+  - → Present only Co-Reg. The `*_co_reg_spectral_info0` configs (plain, Append UMAP and PCA variants) waste compute.
+  - [x] Archived the 24 active Co-Reg info0 configs into `experiments/archive/<dir>/`, removed them from the queue lists, and demoted `mv_co_reg_spectral_info0` to secondary in the catalog (with a corrected `change` text). The single Trump info0 run is ignored, because Trump is being re-run on `trump_s25000`. (2026-10-01)
 - [ ] **Naive Append is identical to w = 0.5 on Gadarian** (15 of 15 runs). Confirm this is legitimate scale equivalence and not a config bug.
 - [ ] **NaN NPMI/UMass** (investigated 2026-10-01; three separate causes)
   - [ ] **Trump FastTriTopic is stale.** The cluster ran revision `cd85c54` (Sept 21), which predates the unigram fix `2d872c3` (Sept 23). Its keywords include bigrams, which reproduces the mechanism in [tritopic_keyword_ngrams.md](tritopic_keyword_ngrams.md). *All* of its metrics are incomparable, not only the NaN ones. Every other dataset's TriTopic results include the fix. → Re-run (no code change needed).
@@ -164,6 +169,13 @@ These are dataset-level paired deltas: each variant minus its reference, matched
 - [ ] Conclusion: drop "given the strong performance of COVET₃"
 
 ---
+
+## Next session (2026-10-02, 8:00–10:00, before the 10:00 meeting)
+
+- [ ] 8:00–8:30: section 3 sanity checks: Co-Reg vs Co-Reg info0 identical partitions; Naive Append = w0.5 on Gadarian
+- [ ] 8:30–9:30: generators for the main HDBSCAN-family ablation table (LaTeX) and the coherence vs diversity trade-off figure. Label the output "preliminary" unless the recompute has run.
+- [ ] 9:30–10:00: make the analysis and dashboard read `results/derived/topic_metrics_recomputed.csv` when present; dose-response figure if time allows
+- Deferred to the weekend (user): run the recompute, merge the Trump raw files, optional runs (weighted Append on Fed/Trump, Trump TriTopic), paper writing
 
 ## Log
 

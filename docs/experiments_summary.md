@@ -52,7 +52,7 @@ The evaluated models span eight architectural paradigms:
 * **`append_umap_mv_k_means`**: Append UMAP $\to$ Multi-View K-Means.
 * **`append_umap_mv_spherical_k_means`**: Append UMAP $\to$ Multi-View Spherical K-Means.
 * **`append_umap_mv_spectral` & `append_umap_mv_spectral_info0`**: Append UMAP $\to$ Multi-View Spectral.
-* **`append_umap_mv_co_reg_spectral` & `append_umap_mv_co_reg_spectral_info0`**: Append UMAP $\to$ Co-Regularized Multi-View Spectral.
+* **`append_umap_mv_co_reg_spectral`**: Append UMAP $\to$ Co-Regularized Multi-View Spectral. Its `info0` variant is archived (see `mv_co_reg_spectral`).
 
 ### 2.3 Manifold Alignment
 * **`aligned_umap`**: Uses UMAP's `AlignedUMAP` to align relations across semantic text embeddings and metadata spaces $\to$ HDBSCAN.
@@ -64,7 +64,7 @@ Evaluates View 0 (Text Embeddings) and View 1 (Metadata Covariates):
 * **`mv_k_means`**: Multi-View K-Means (Euclidean distance on all views).
 * **`mv_spherical_k_means`**: Multi-View Spherical K-Means (Cosine distance on all views).
 * **`mv_spectral` & `mv_spectral_info0`**: Multi-View Spectral Clustering with co-training graph Laplacians.
-* **`mv_co_reg_spectral` & `mv_co_reg_spectral_info0`**: Co-regularized Multi-View Spectral Clustering (Kumar & Daume, enforces consensus across eigenvectors).
+* **`mv_co_reg_spectral`**: Co-regularized Multi-View Spectral Clustering (Kumar & Daume, enforces consensus across eigenvectors). Its `info0` variants were archived on 2026-10-01. mvlearn's `MultiviewCoRegSpectralClustering` accepts `info_view` but never uses it: it always clusters the stacked eigenvectors of all views. Those variants therefore reproduce this model (identical assignments in all 15 Fed runs). `mv_spectral_info0` does use `info_view` and is unaffected.
 * **`mv_hdbscan`**: Multi-View HDBSCAN from the sibling `MV-HDBSCAN` package (per-view scaling, `max` fusion) with baseline-matched UMAP and `nr_topics` settings. Primary ablation of `baseline` in [`config/model_catalog.yaml`](../config/model_catalog.yaml).
 * **`feature_stacking_hdbscan`**: HDBSCAN on standardized, horizontally stacked text and metadata views (`MV-HDBSCAN` package) with baseline-matched UMAP and `nr_topics` settings.
 
