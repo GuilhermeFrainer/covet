@@ -176,10 +176,25 @@ These are dataset-level paired deltas: each variant minus its reference, matched
 
 ## Next session (2026-10-02, 8:00–10:00, before the 10:00 meeting)
 
-- [ ] 8:00–8:30: section 3 sanity checks: Co-Reg vs Co-Reg info0 identical partitions; Naive Append = w0.5 on Gadarian
-- [ ] 8:30–9:30: generators for the main HDBSCAN-family ablation table (LaTeX) and the coherence vs diversity trade-off figure. Label the output "preliminary" unless the recompute has run.
-- [ ] 9:30–10:00: make the analysis and dashboard read `results/derived/topic_metrics_recomputed.csv` when present; dose-response figure if time allows
-- Deferred to the weekend (user): run the recompute, merge the Trump raw files, optional runs (weighted Append on Fed/Trump, Trump TriTopic), paper writing
+Both sanity checks were finished on 2026-10-01. **The RQ1 dashboard work below was also done on the evening of 2026-10-01** (logic in `src/comparisons/views.py`, tested; the dashboard was driven headlessly through every scope). The 8:00 slot is free to review it before the meeting.
+
+> [!warning] Trump is excluded from the cross-dataset tests (coverage 4/5) until the Trump raw files are merged. The Sept 17 merged rows and the Sept 29 raw reruns are two different runs for the same cells, so the comparison code rejects them as ambiguous.
+
+- [x] **8:00–8:30: compact comparison table**
+  - Drop the "Intended change" and "Type" columns.
+  - Split "Comparison" into **Reference** and **Proposed**, using the catalog's `short_label`. Keep "Chain" as the grouping column.
+  - Add a **metric selector** (default NPMI). The table shows only that metric: reference score, proposed score, mean Δ, median Δ, W/T/L, rank-biserial r, exact p, Holm p and coverage.
+  - The dot plot **follows the selector**: a single panel replaces the fixed NPMI / IRBO / AMI panels.
+- [x] **8:30–10:00: dataset / topic-count scope**
+  - `src/comparisons/analysis.py`: add an optional `requested_topics` filter to `compute_ablation_comparisons` and `compute_registered_edge_comparisons`. "Complete" then means all 3 seeds at the chosen topic counts. Add tests.
+  - **Scope controls** at the top of the tab: Dataset (All / one) and Requested topics (All / one).
+    - All datasets + fixed k: dataset deltas average 3 seeds; W/T/L and tests still apply.
+    - One dataset: descriptive table (scores mean ± SD over seeds, Δ, seed-level wins) and a plot of Δ against topic count (one line per comparison, error bars over seeds).
+    - One dataset + one k: per-seed values, realized topic count and noise share.
+  - **Heatmap**: comparisons × the 25 dataset × topic-count cells, coloured by the seed-averaged Δ of the selected metric, with realized topic counts in the tooltip.
+  - Label all single-slice p-values "exploratory". Show realized topic counts (HDBSCAN requested ≠ realized, e.g. Gadarian ≈ 13).
+- Deferred to after the meeting: LaTeX table and figure generators for the paper; wiring in the recomputed metrics.
+- Deferred to the weekend (user): run the recompute, merge the Trump raw files, optional runs (weighted Append on Fed/Trump, Trump TriTopic), paper writing.
 
 ## Log
 

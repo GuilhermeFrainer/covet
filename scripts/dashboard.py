@@ -60,8 +60,11 @@ from src.model_catalog import (
     load_catalog,
     sort_catalog,
 )
+from src.comparisons import views as comparison_views
 from src.comparisons.analysis import (
+    BENCHMARK_DATASETS,
     INFERENTIAL_METRICS,
+    REQUESTED_TOPICS,
     compute_ablation_comparisons,
     compute_registered_edge_comparisons,
     load_rq1_edges,
@@ -574,6 +577,296 @@ def render_alignment_section(filtered_df: pl.DataFrame, alignment: pl.DataFrame)
     st.dataframe(summary, hide_index=True, width="stretch")
 
 
+RQ1_DATASET_COLORS = ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00"]
+RQ1_DATASET_SHAPES = ["circle", "square", "triangle-up", "diamond", "cross"]
+RQ1_NUMBER_FORMAT = st.column_config.NumberColumn(format="%.4f")
+RQ1_P_FORMAT = st.column_config.NumberColumn(format="%.3f")
+
+
+def render_rq1_cross_dataset(
+    edges, catalog, edge_datasets, edge_summary, metric, topic_slice
+):
+    """Dot plot and summary table across datasets for one metric."""
+    metric_label = comparison_views.METRIC_LABELS.get(metric, metric)
+    table = comparison_views.comparison_table(
+        edges, catalog, edge_summary, edge_datasets, metric
+    )
+    names = comparison_views.edge_names(edges, catalog)
+    row_labels = {
+        name["Edge ID"]: f"{name['Comparison']}  (W/T/L {row['W/T/L']}; "
+        f"n={row['Datasets']})"
+        for name, row in zip(names.to_dicts(), table.to_dicts())
+    }
+    ordered_labels = [row_labels[edge["id"]] for edge in edges]
+    scope = (
+        f"requested topics = {topic_slice[0]} (exploratory slice)"
+        if topic_slice
+        else "all requested topic counts"
+    )
+
+    rows = (
+        edge_datasets.filter(
+            (pl.col("Condition") == comparison_views.STANDARD_CONDITION)
+            & (pl.col("Metric") == metric)
+            & pl.col("Improvement delta").is_not_null()
+        ).to_dicts()
+        if not edge_datasets.is_empty()
+        else []
+    )
+    st.subheader(f"Dataset-level Δ {metric_label}")
+    st.markdown(
+        f"Each dot is one dataset ({scope}); the black diamond is the median "
+        "dataset delta. Dataset colors and marker shapes match the heatmap legend."
+    )
+    if rows:
+        for row in rows:
+            row["Plot row"] = row_labels[row["Edge ID"]]
+        medians = [
+            {"Plot row": row_labels[edge["id"]], "Median Δ": median}
+            for edge, median in zip(edges, table["Median Δ"].to_list())
+            if median is not None
+        ]
+        limit = max(max(abs(row["Improvement delta"]) for row in rows) * 1.15, 0.005)
+        x_scale = alt.Scale(domain=[-limit, limit])
+        y = alt.Y(
+            "Plot row:N",
+            sort=ordered_labels,
+            axis=alt.Axis(title=None, labelLimit=420, labelFontSize=11),
+        )
+        points = alt.Chart(alt.Data(values=rows)).mark_point(
+            filled=True, size=90, opacity=0.9
+        ).encode(
+            x=alt.X("Improvement delta:Q", title=f"Δ {metric_label}", scale=x_scale),
+            y=y,
+            yOffset=alt.YOffset("Dataset:N", sort=list(BENCHMARK_DATASETS)),
+            color=alt.Color(
+                "Dataset:N",
+                scale=alt.Scale(
+                    domain=list(BENCHMARK_DATASETS), range=RQ1_DATASET_COLORS
+                ),
+                legend=alt.Legend(title="Dataset"),
+            ),
+            shape=alt.Shape(
+                "Dataset:N",
+                scale=alt.Scale(
+                    domain=list(BENCHMARK_DATASETS), range=RQ1_DATASET_SHAPES
+                ),
+                legend=None,
+            ),
+            tooltip=[
+                alt.Tooltip("Plot row:N", title="Comparison"),
+                alt.Tooltip("Dataset:N"),
+                alt.Tooltip("Baseline score:Q", title="Reference", format=".4f"),
+                alt.Tooltip("Ablation score:Q", title="Proposed", format=".4f"),
+                alt.Tooltip("Improvement delta:Q", title="Δ", format=".5f"),
+                alt.Tooltip("Coverage:N"),
+            ],
+        )
+        median = alt.Chart(alt.Data(values=medians)).mark_point(
+            shape="diamond", color="#111111", size=170
+        ).encode(
+            x=alt.X("Median Δ:Q", scale=x_scale),
+            y=alt.Y("Plot row:N", sort=ordered_labels),
+            tooltip=[alt.Tooltip("Median Δ:Q", format=".5f")],
+        )
+        zero = alt.Chart(alt.Data(values=[{"zero": 0}])).mark_rule(
+            color="#666666", strokeDash=[4, 4]
+        ).encode(x=alt.X("zero:Q"))
+        st.altair_chart(
+            (zero + points + median)
+            .properties(height=max(260, 52 * len(ordered_labels)))
+            .configure_axis(grid=True, gridOpacity=0.2),
+            width="stretch",
+        )
+    else:
+        st.info(f"No matched dataset-level values for {metric_label} in this scope.")
+
+    st.subheader(f"Comparison table · {metric_label}")
+    st.dataframe(
+        table,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            **{
+                column: RQ1_NUMBER_FORMAT
+                for column in (
+                    "Reference score", "Proposed score", "Mean Δ", "Median Δ",
+                    "Rank-biserial r",
+                )
+            },
+            "Exact p": RQ1_P_FORMAT,
+            "Holm p": RQ1_P_FORMAT,
+        },
+    )
+    caption = (
+        "Scores average the datasets included in the test. W/T/L counts datasets. "
+        "With five datasets, the smallest two-sided exact p is 0.0625; tests "
+        "summarize cross-dataset consistency and are not confirmatory."
+    )
+    if topic_slice:
+        caption += (
+            " This topic-count slice is exploratory: choosing slices after seeing "
+            "the results inflates apparent effects."
+        )
+    st.caption(caption)
+
+
+def render_rq1_single_dataset(edges, catalog, edge_runs, metric, dataset, topic_slice):
+    """Descriptive views for one dataset; no cross-dataset test applies."""
+    metric_label = comparison_views.METRIC_LABELS.get(metric, metric)
+    descriptive_columns = {
+        column: RQ1_NUMBER_FORMAT
+        for column in (
+            "Reference mean", "Reference SD", "Proposed mean", "Proposed SD",
+            "Mean Δ", "Reference", "Proposed", "Δ",
+        )
+    }
+    if topic_slice is None:
+        trend = comparison_views.delta_by_topic_count(
+            edges, catalog, edge_runs, metric, dataset
+        )
+        st.subheader(f"Δ {metric_label} by requested topic count · {dataset}")
+        if trend.is_empty():
+            st.info("No matched runs for this dataset.")
+        else:
+            order = comparison_views.edge_names(edges, catalog)["Comparison"].to_list()
+            base = alt.Chart(alt.Data(values=trend.to_dicts())).encode(
+                x=alt.X(
+                    "Requested topics:O",
+                    sort=list(REQUESTED_TOPICS),
+                    axis=alt.Axis(labelAngle=0),
+                ),
+                color=alt.Color(
+                    "Comparison:N",
+                    sort=order,
+                    legend=alt.Legend(orient="bottom", columns=2, labelLimit=400),
+                ),
+            )
+            lines = base.mark_line(point=True).encode(
+                y=alt.Y("Mean Δ:Q", title=f"Δ {metric_label} (mean over seeds)"),
+                tooltip=[
+                    "Comparison:N", "Requested topics:O",
+                    alt.Tooltip("Mean Δ:Q", format=".5f"),
+                    alt.Tooltip("SD Δ:Q", format=".5f"), "Seeds:Q",
+                ],
+            )
+            bars = base.mark_errorbar(opacity=0.5).encode(
+                y=alt.Y("Low:Q", title=None), y2="High:Q"
+            )
+            zero = alt.Chart(alt.Data(values=[{"zero": 0}])).mark_rule(
+                color="#666666", strokeDash=[4, 4]
+            ).encode(y="zero:Q")
+            st.altair_chart(
+                (zero + bars + lines).properties(height=380), width="stretch"
+            )
+            st.caption("Error bars span ± 1 SD of the seed-level Δ.")
+
+    scope = f"k = {topic_slice[0]}" if topic_slice else "all requested topic counts"
+    st.subheader(f"{metric_label} · {dataset} · {scope}")
+    table = comparison_views.dataset_table(
+        edges, catalog, edge_runs, metric, dataset, requested_topics=topic_slice
+    )
+    if table.is_empty():
+        st.info("No matched runs for this dataset.")
+        return
+    st.dataframe(
+        table, hide_index=True, width="stretch", column_config=descriptive_columns
+    )
+    st.caption(
+        "Descriptive only: a single dataset is one unit of inference, so no test "
+        "applies. W/T/L counts matched runs (seeds × topic counts), which are not "
+        "independent. Topics and outliers are realized values: HDBSCAN-based "
+        "models can return fewer topics than requested."
+    )
+    if topic_slice:
+        st.markdown("**Per-seed values**")
+        st.dataframe(
+            comparison_views.seed_table(
+                edges, catalog, edge_runs, metric, dataset, topic_slice[0]
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config=descriptive_columns,
+        )
+
+
+def render_rq1_heatmap(edges, catalog, edge_runs, metric, dataset, topic_slice):
+    """Seed-averaged Δ for every comparison × dataset × requested topic count."""
+    metric_label = comparison_views.METRIC_LABELS.get(metric, metric)
+    cells = comparison_views.heatmap_cells(edges, catalog, edge_runs, metric)
+    st.subheader(f"Where the proposed models differ · Δ {metric_label}")
+    if cells.is_empty():
+        st.info("No matched runs to map.")
+        return
+    cell_order = [
+        f"{name} · k={count}"
+        for name in BENCHMARK_DATASETS
+        for count in REQUESTED_TOPICS
+    ]
+    comparison_order = comparison_views.edge_names(edges, catalog)[
+        "Comparison"
+    ].to_list()
+    cells = cells.with_columns(
+        (
+            (pl.col("Dataset") == dataset if dataset else pl.lit(True))
+            & (
+                pl.col("Requested topics") == topic_slice[0]
+                if topic_slice
+                else pl.lit(True)
+            )
+        ).alias("Selected")
+    )
+    limit = max(cells["Mean Δ"].abs().max() or 0.0, 1e-6)
+    base = alt.Chart(alt.Data(values=cells.to_dicts())).encode(
+        x=alt.X(
+            "Cell:N",
+            sort=cell_order,
+            title=None,
+            axis=alt.Axis(labelAngle=-60, labelFontSize=10),
+        ),
+        y=alt.Y(
+            "Comparison:N",
+            sort=comparison_order,
+            title=None,
+            axis=alt.Axis(labelLimit=400),
+        ),
+    )
+    rects = base.mark_rect().encode(
+        color=alt.Color(
+            "Mean Δ:Q",
+            title=f"Δ {metric_label}",
+            scale=alt.Scale(scheme="redblue", domain=[-limit, limit], domainMid=0),
+        ),
+        tooltip=[
+            "Comparison:N", "Dataset:N", "Requested topics:Q",
+            alt.Tooltip("Mean Δ:Q", format=".5f"),
+            alt.Tooltip("Reference:Q", format=".4f"),
+            alt.Tooltip("Proposed:Q", format=".4f"),
+            alt.Tooltip("Reference topics:Q", title="Realized topics (reference)",
+                        format=".1f"),
+            alt.Tooltip("Proposed topics:Q", title="Realized topics (proposed)",
+                        format=".1f"),
+            "Seeds:Q",
+        ],
+    )
+    layers = rects
+    if dataset or topic_slice:
+        outline = base.transform_filter("datum.Selected").mark_rect(
+            fill=None, stroke="#111111", strokeWidth=2
+        )
+        layers = rects + outline
+    st.altair_chart(
+        layers.properties(height=max(220, 44 * len(comparison_order))),
+        width="stretch",
+    )
+    st.caption(
+        "Blue favors the proposed model, red the reference (for Metadata AMI: blue "
+        "means the proposed model's topics follow the metadata more closely). Each "
+        "cell averages the matched seeds; hover for scores and realized topic counts. "
+        "Outlined cells are the current dataset / topic-count selection."
+    )
+
+
 def main():
     """Main function to run the Streamlit dashboard."""
     st.set_page_config(
@@ -858,9 +1151,9 @@ def main():
             "analysis after the planned runs and parity checks are complete."
         )
         st.caption(
-            "Rows are explicit directed comparisons from the RQ1 edge registry. "
-            "Each dataset contributes one value after averaging matched seeds and "
-            "requested topic counts. Positive deltas favor the variant."
+            "Rows are explicit directed comparisons from the RQ1 edge registry: each "
+            "proposed model against the reference it extends. Positive deltas favor "
+            "the proposed model (for Metadata AMI: proposed minus reference)."
         )
         try:
             rq1_edges = load_rq1_edges()
@@ -868,189 +1161,81 @@ def main():
             st.error(f"Cannot load RQ1 comparison edges: {exc}")
             rq1_edges = []
         main_edges = [edge for edge in rq1_edges if edge["main_figure"]]
-        edge_datasets, edge_summary, edge_runs = compute_registered_edge_comparisons(
-            all_results, catalog, main_edges
-        ) if main_edges else (pl.DataFrame(), pl.DataFrame(), pl.DataFrame())
 
-        if edge_datasets.is_empty():
+        all_datasets_label, all_topics_label = "All datasets", "All topic counts"
+        scope_metric, scope_dataset, scope_topics = st.columns(3)
+        with scope_metric:
+            rq1_metric = st.selectbox(
+                "Metric:",
+                list(INFERENTIAL_METRICS),
+                index=list(INFERENTIAL_METRICS).index("c_npmi"),
+                format_func=lambda m: comparison_views.METRIC_LABELS.get(m, m),
+                key="rq1_metric",
+            )
+        with scope_dataset:
+            dataset_choice = st.selectbox(
+                "Dataset:",
+                [all_datasets_label, *BENCHMARK_DATASETS],
+                key="rq1_dataset",
+            )
+        with scope_topics:
+            topics_choice = st.selectbox(
+                "Requested topics:",
+                [all_topics_label, *REQUESTED_TOPICS],
+                key="rq1_topics",
+            )
+        rq1_dataset = None if dataset_choice == all_datasets_label else dataset_choice
+        topic_slice = None if topics_choice == all_topics_label else (topics_choice,)
+
+        empty = (pl.DataFrame(), pl.DataFrame(), pl.DataFrame())
+        full_grid = (
+            compute_registered_edge_comparisons(all_results, catalog, main_edges)
+            if main_edges
+            else empty
+        )
+        scoped = (
+            compute_registered_edge_comparisons(
+                all_results, catalog, main_edges, requested_topics=topic_slice
+            )
+            if main_edges and topic_slice
+            else full_grid
+        )
+        edge_datasets, edge_summary, edge_runs = scoped
+
+        if full_grid[2].is_empty():
             st.info("No matched results are available for the registered RQ1 edges.")
         else:
-            standard_condition = "remove_rep_stopwords"
-            plot_rows = edge_datasets.filter(
-                (pl.col("Condition") == standard_condition)
-                & pl.col("Metric").is_in(["c_npmi", "irbo", "meta_ami_mean"])
-                & pl.col("Improvement delta").is_not_null()
-            )
-            summary_by_edge_metric = {
-                (row["Edge ID"], row["Metric"]): row
-                for row in edge_summary.to_dicts()
-            }
-            edge_order = [edge["id"] for edge in main_edges]
-            plot_row_names = {}
-            for edge in main_edges:
-                for metric in ("c_npmi", "irbo", "meta_ami_mean"):
-                    result = summary_by_edge_metric.get((edge["id"], metric), {})
-                    n = result.get("Datasets", 0) or 0
-                    wins, ties, losses = (
-                        result.get("Wins"), result.get("Ties"), result.get("Losses")
-                    )
-                    wtl = f"{wins}/{ties}/{losses}" if wins is not None else "not tested"
-                    plot_row_names[(edge["id"], metric)] = (
-                        f"{edge['chain']} · {edge['label']}   "
-                        f"(W/T/L {wtl}; n={n}/5)"
-                    )
-
-            st.subheader("Dataset-level improvement plot")
-            st.markdown(
-                "Each dot is one dataset. The black diamond marks the median dataset "
-                "delta. Dataset colors and marker shapes are consistent across panels. "
-                "Rows are grouped by the registered comparison chain."
-            )
-            dataset_order = ["anes", "fed", "gadarian", "trump", "yelp"]
-            dataset_colors = ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00"]
-            dataset_shapes = ["circle", "square", "triangle-up", "diamond", "cross"]
-
-            def delta_panel(metric, title, x_title=None):
-                rows = plot_rows.filter(pl.col("Metric") == metric).to_dicts()
-                if not rows:
-                    return None
-                for row in rows:
-                    row["Plot row"] = plot_row_names[(row["Edge ID"], metric)]
-                rows.sort(key=lambda row: edge_order.index(row["Edge ID"]))
-                ordered_labels = [
-                    plot_row_names[(edge["id"], metric)] for edge in main_edges
-                    if (edge["id"], metric) in summary_by_edge_metric
-                ]
-                medians = []
-                for edge in main_edges:
-                    summary = summary_by_edge_metric.get((edge["id"], metric))
-                    if summary and summary.get("Median dataset delta") is not None:
-                        medians.append({
-                            "Plot row": plot_row_names[(edge["id"], metric)],
-                            "Median dataset delta": summary["Median dataset delta"],
-                        })
-                max_abs = max(abs(row["Improvement delta"]) for row in rows)
-                limit = max(max_abs * 1.15, 0.005)
-                y = alt.Y(
-                    "Plot row:N", sort=ordered_labels,
-                    axis=alt.Axis(title=None, labelLimit=340, labelFontSize=10),
+            if rq1_dataset is None:
+                render_rq1_cross_dataset(
+                    main_edges, catalog, edge_datasets, edge_summary, rq1_metric,
+                    topic_slice,
                 )
-                x = alt.X(
-                    "Improvement delta:Q",
-                    title=x_title or f"Improvement-oriented Δ {metric}",
-                    scale=alt.Scale(domain=[-limit, limit]),
+            else:
+                render_rq1_single_dataset(
+                    main_edges, catalog, full_grid[2], rq1_metric, rq1_dataset,
+                    topic_slice,
                 )
-                base = alt.Chart(alt.Data(values=rows))
-                points = base.mark_point(filled=True, size=90, opacity=0.9).encode(
-                    x=x,
-                    y=y,
-                    yOffset=alt.YOffset("Dataset:N", sort=dataset_order),
-                    color=alt.Color(
-                        "Dataset:N",
-                        scale=alt.Scale(domain=dataset_order, range=dataset_colors),
-                        legend=alt.Legend(title="Dataset"),
-                    ),
-                    shape=alt.Shape(
-                        "Dataset:N",
-                        scale=alt.Scale(domain=dataset_order, range=dataset_shapes),
-                        legend=None,
-                    ),
-                    tooltip=[
-                        alt.Tooltip("Chain:N"), alt.Tooltip("Comparison:N"),
-                        alt.Tooltip("Dataset:N"), alt.Tooltip("Improvement delta:Q", format=".5f"),
-                        alt.Tooltip("Coverage:N"),
-                    ],
-                )
-                median = alt.Chart(alt.Data(values=medians)).mark_point(
-                    shape="diamond", color="#111111", size=170,
-                ).encode(
-                    x=alt.X("Median dataset delta:Q", scale=alt.Scale(domain=[-limit, limit])),
-                    y=alt.Y("Plot row:N", sort=ordered_labels),
-                    tooltip=[alt.Tooltip("Median dataset delta:Q", format=".5f")],
-                )
-                zero = alt.Chart(alt.Data(values=[{"zero": 0}])).mark_rule(
-                    color="#666666", strokeDash=[4, 4],
-                ).encode(x=alt.X("zero:Q"))
-                height = max(260, 46 * len(ordered_labels))
-                return (zero + points + median).properties(
-                    title=title, height=height,
-                ).configure_axis(grid=True, gridOpacity=0.2)
-
-            figure_left, figure_right = st.columns(2)
-            with figure_left:
-                chart = delta_panel("c_npmi", "A · NPMI")
-                if chart is not None:
-                    st.altair_chart(chart, width="stretch")
-            with figure_right:
-                chart = delta_panel("irbo", "B · IRBO")
-                if chart is not None:
-                    st.altair_chart(chart, width="stretch")
-            chart = delta_panel(
-                "meta_ami_mean", "C · Topic–metadata AMI",
-                x_title="Δ meta_ami_mean (variant − reference)",
-            )
-            if chart is not None:
-                st.altair_chart(chart, width="stretch")
-                st.caption(
-                    "Panel C is a mechanism check, not a quality score: a positive "
-                    "delta means the variant's topics follow the raw covariates more "
-                    "closely. W/T/L counts increases/ties/decreases."
-                )
-            st.caption(
-                "No confidence intervals are shown. Datasets are the independent units; "
-                "seed and requested-count runs are repeated conditions. A row's dataset "
-                "set can differ from another row, as shown by its n and W/T/L annotation."
+            st.divider()
+            render_rq1_heatmap(
+                main_edges, catalog, full_grid[2], rq1_metric, rq1_dataset,
+                topic_slice,
             )
 
-            main_table_rows = []
-            edge_dataset_lookup = {
-                (row["Edge ID"], row["Metric"]): row
-                for row in edge_summary.to_dicts()
-            }
-            metric_labels = {
-                "c_v": "C_v",
-                "c_npmi": "NPMI",
-                "u_mass": "UMass",
-                "irbo": "IRBO",
-                "topic_diversity": "Topic diversity",
-                "duration_seconds": "Duration (s)",
-                "outliers": "Outliers",
-                "meta_ami_mean": "Metadata AMI",
-            }
-            for edge in main_edges:
-                row = {
-                    "Chain": edge["chain"],
-                    "Comparison": edge["label"],
-                    "Intended change": edge["intended_change"],
-                    "Type": edge["classification"].replace("_", " "),
-                }
-                for metric in INFERENTIAL_METRICS:
-                    summary = edge_dataset_lookup.get((edge["id"], metric), {})
-                    label = metric_labels.get(metric, metric)
-                    row[f"Median Δ {label}"] = summary.get("Median dataset delta")
-                    wins, ties, losses = (
-                        summary.get("Wins"), summary.get("Ties"), summary.get("Losses")
-                    )
-                    row[f"{label} W/T/L"] = (
-                        f"{wins}/{ties}/{losses}" if wins is not None else "—"
-                    )
-                main_table_rows.append(row)
-            st.subheader("Compact comparison table")
-            st.dataframe(
-                pl.DataFrame(main_table_rows, infer_schema_length=None),
-                hide_index=True,
-                width="stretch",
+            hidden = (
+                "Edge ID", "Model ID", "Baseline ID", "Edge order",
+                "Intended change", "Comparison type",
             )
-
             with st.expander("Exploratory statistical diagnostics"):
-                stats_view = edge_summary.drop(
-                    [column for column in ("Edge ID", "Model ID", "Baseline ID", "Edge order") if column in edge_summary.columns]
+                stats_view = edge_summary.filter(pl.col("Metric") == rq1_metric)
+                st.dataframe(
+                    stats_view.drop([c for c in hidden if c in stats_view.columns]),
+                    hide_index=True,
+                    width="stretch",
                 )
-                st.dataframe(stats_view, hide_index=True, width="stretch")
                 st.caption(
-                    "Exact p-values and Holm adjustments are exploratory. The adjustment "
-                    "currently covers estimable registered main-figure edges within each "
-                    "metric; incomplete edges are shown but omitted from that adjustment. "
+                    "Exact p-values and Holm adjustments are exploratory. The "
+                    "adjustment covers estimable registered main-figure edges within "
+                    "each metric; incomplete edges are shown but omitted from it. "
                     "Final family membership remains to be approved."
                 )
             with st.expander("Dataset-level and seed × topic-count details"):
@@ -1061,16 +1246,25 @@ def main():
                     if "remove_rep_stopwords" in condition_options else 0,
                     key="rq1_detail_condition",
                 )
-                dataset_view = edge_datasets.filter(pl.col("Condition") == condition).drop(
-                    [column for column in ("Edge ID", "Model ID", "Baseline ID", "Edge order") if column in edge_datasets.columns]
+                in_scope = (pl.col("Condition") == condition) & (
+                    pl.col("Metric") == rq1_metric
                 )
-                run_view = edge_runs.filter(pl.col("Condition") == condition).drop(
-                    [column for column in ("Edge ID", "Model ID", "Edge order") if column in edge_runs.columns]
-                )
+                if rq1_dataset:
+                    in_scope = in_scope & (pl.col("Dataset") == rq1_dataset)
+                dataset_view = edge_datasets.filter(in_scope)
+                run_view = edge_runs.filter(in_scope)
                 st.markdown("**Dataset summaries and coverage**")
-                st.dataframe(dataset_view, hide_index=True, width="stretch")
+                st.dataframe(
+                    dataset_view.drop([c for c in hidden if c in dataset_view.columns]),
+                    hide_index=True,
+                    width="stretch",
+                )
                 st.markdown("**Matched seed × requested-topic-count values**")
-                st.dataframe(run_view, hide_index=True, width="stretch")
+                st.dataframe(
+                    run_view.drop([c for c in hidden if c in run_view.columns]),
+                    hide_index=True,
+                    width="stretch",
+                )
                 st.caption(
                     "Matching sample size does not prove identical document samples or "
                     "historical effective configurations. None of the comparisons has "

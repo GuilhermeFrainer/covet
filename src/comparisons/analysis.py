@@ -168,12 +168,17 @@ def _deduplicate_runs(df):
     return {key: value[1] for key, value in chosen.items()}, ambiguous
 
 
-def compute_ablation_comparisons(df: pl.DataFrame, catalog: dict, summary_model_ids=None):
+def compute_ablation_comparisons(
+    df: pl.DataFrame, catalog: dict, summary_model_ids=None, requested_topics=None
+):
     """Build dataset-level deltas and cross-dataset tests for registered pairs.
 
     The dashboard intentionally presents all preprocessing conditions separately.
-    Inferential tests use the documented standard condition and fixed 15-cell grid.
+    Inferential tests use the documented standard condition and the seed x
+    requested-topic grid: all of `REQUESTED_TOPICS` by default, or only the
+    counts in `requested_topics` (an exploratory slice).
     """
+    topic_grid = tuple(requested_topics) if requested_topics else REQUESTED_TOPICS
     cells, ambiguous = _deduplicate_runs(df)
     dataset_rows = []
     run_rows = []
@@ -197,7 +202,7 @@ def compute_ablation_comparisons(df: pl.DataFrame, catalog: dict, summary_model_
                 standard_seen.add(ablation_id)
             pair_dataset_deltas = {metric: [] for metric in INFERENTIAL_METRICS}
             for dataset in datasets:
-                expected = {(seed, count) for seed in SEEDS for count in REQUESTED_TOPICS}
+                expected = {(seed, count) for seed in SEEDS for count in topic_grid}
                 metric_diffs = {metric: [] for metric in (*INFERENTIAL_METRICS, "n_topics")}
                 baseline_scores = {metric: [] for metric in metric_diffs}
                 variant_scores = {metric: [] for metric in metric_diffs}
@@ -339,7 +344,10 @@ def compute_ablation_comparisons(df: pl.DataFrame, catalog: dict, summary_model_
                             "Tied-rank groups": None, "Sign-flip assignments": None,
                             "Rank-biserial effect": None, "Raw exact p": None,
                             "Holm adjusted p": None,
-                            "Inference status": "descriptive only: fewer than two datasets have a complete 15-cell grid",
+                            "Inference status": (
+                                "descriptive only: fewer than two datasets have a "
+                                f"complete {len(SEEDS) * len(topic_grid)}-cell grid"
+                            ),
                         })
 
     # Keep catalog pairs with no standard-condition rows visible in the summary.
@@ -391,8 +399,13 @@ def compute_ablation_comparisons(df: pl.DataFrame, catalog: dict, summary_model_
     return dataset_frame, summary_frame, run_frame
 
 
-def compute_registered_edge_comparisons(df: pl.DataFrame, catalog: dict, edges: list[dict]):
-    """Compute results for explicit directed edges, including adjacent variants."""
+def compute_registered_edge_comparisons(
+    df: pl.DataFrame, catalog: dict, edges: list[dict], requested_topics=None
+):
+    """Compute results for explicit directed edges, including adjacent variants.
+
+    `requested_topics` restricts the grid as in `compute_ablation_comparisons`.
+    """
     dataset_rows = []
     summary_rows = []
     run_rows = []
@@ -407,7 +420,10 @@ def compute_registered_edge_comparisons(df: pl.DataFrame, catalog: dict, edges: 
         edge_catalog = dict(catalog)
         edge_catalog[variant_id] = dict(catalog[variant_id], baseline_id=reference_id)
         dataset_frame, summary_frame, run_frame = compute_ablation_comparisons(
-            df, edge_catalog, summary_model_ids={variant_id}
+            df,
+            edge_catalog,
+            summary_model_ids={variant_id},
+            requested_topics=requested_topics,
         )
         if not dataset_frame.is_empty():
             dataset_rows.extend(
