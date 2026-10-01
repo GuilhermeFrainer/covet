@@ -69,7 +69,11 @@ These are dataset-level paired deltas: each variant minus its reference, matched
   - The stored scores differ only where topics were padded (ANES 15/15 pairs, Gadarian 8/15, Fed 0/15), because `random.choices` was unseeded. Padding noise alone moved C_V by up to 0.029 for identical topics, which is evidence for the evaluation-change disclosure.
   - → Present only Co-Reg. The `*_co_reg_spectral_info0` configs (plain, Append UMAP and PCA variants) waste compute.
   - [x] Archived the 24 active Co-Reg info0 configs into `experiments/archive/<dir>/`, removed them from the queue lists, and demoted `mv_co_reg_spectral_info0` to secondary in the catalog (with a corrected `change` text). The single Trump info0 run is ignored, because Trump is being re-run on `trump_s25000`. (2026-10-01)
-- [ ] **Naive Append is identical to w = 0.5 on Gadarian** (15 of 15 runs). Confirm this is legitimate scale equivalence and not a config bug.
+- [x] **Naive Append is identical to w = 0.5 on Gadarian** (15 of 15 runs). *(Resolved 2026-10-01: a real effect, not a bug.)*
+  - Not a config mix-up: the w = 0.5 runs recorded `euclidean` and their own config hash, and on ANES and Yelp the two models don't match a single metric.
+  - Both models produce the **same partition** in all 15 pairs (ARI = 1.0; only the topic IDs differ). That partition *is* the metadata: for k ≥ 20 it matches Gadarian's 14 metadata profiles (7 party levels × 2 treatment arms) exactly (AMI = 1.0). At k = 10, both merge the profiles identically. At w = 0.3, AMI with the profiles is already about 0.95.
+  - Same partition → same topic words → same metrics. The NPMI differences in 4 pairs are 2.8e-17 (summation order).
+  - → For the paper: this is the far end of the dose-response curve. On Gadarian, from w ≥ 0.3 the topics essentially reproduce the metadata groups, which supports the trade-off framing.
 - [ ] **NaN NPMI/UMass** (investigated 2026-10-01; three separate causes)
   - [ ] **Trump FastTriTopic is stale.** The cluster ran revision `cd85c54` (Sept 21), which predates the unigram fix `2d872c3` (Sept 23). Its keywords include bigrams, which reproduces the mechanism in [tritopic_keyword_ngrams.md](tritopic_keyword_ngrams.md). *All* of its metrics are incomparable, not only the NaN ones. Every other dataset's TriTopic results include the fix. → Re-run (no code change needed).
   - [x] **ANES weighted Append (3 runs): tokenization mismatch.** *(Fixed in code 2026-10-01; existing runs still need the recompute below.)*
