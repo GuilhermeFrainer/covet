@@ -5,6 +5,7 @@ from typing import Any, Optional, Union
 import numpy as np
 import pandas as pd
 import polars as pl
+from gensim.corpora.dictionary import Dictionary
 from tritopic import TriTopic
 
 import src.evaluation as evaluation
@@ -107,8 +108,10 @@ def train_and_evaluate(
     elif hasattr(topic_model, "vectorizer_model") and hasattr(
         topic_model.vectorizer_model, "build_analyzer"
     ):
+        # BERTopic strips punctuation before fitting c-TF-IDF, so its topic
+        # words (e.g. "economyno") exist only in the preprocessed text.
         analyzer = topic_model.vectorizer_model.build_analyzer()
-        tokenized_texts = [analyzer(t) for t in text]
+        tokenized_texts = [analyzer(evaluation.bertopic_preprocess(t)) for t in text]
     else:
         tokenized_texts = [t.lower().split() for t in text]
 
@@ -119,17 +122,23 @@ def train_and_evaluate(
     else:
         octis_output = evaluation.bertopic_output_to_octis(topic_model)
 
+    dictionary = Dictionary(tokenized_texts)
     metrics = {
         "model_name": model_id,
         "duration_seconds": duration,
         "n_topics": n_topics,
         "outliers": outlier_count,
+        **evaluation.topic_diagnostics(octis_output, dictionary=dictionary),
+        "evaluation_protocol": evaluation.EVALUATION_PROTOCOL,
     }
 
     # Coherence Loop
     for cm in config["experiment"]["coherence_metrics"]:
         metrics[cm] = evaluation.compute_coherence(
-            model_output=octis_output, texts=tokenized_texts, measure=cm
+            model_output=octis_output,
+            texts=tokenized_texts,
+            measure=cm,
+            dictionary=dictionary,
         )
 
     # Diversity Loop

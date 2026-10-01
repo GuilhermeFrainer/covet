@@ -1,11 +1,30 @@
+"""Topic-quality metrics: coherence and diversity over each topic's top words.
+
+Topics are scored on the words they actually have. Topics with fewer than
+`topk` words are not padded, since repeated words form self-pairs that
+receive the maximum NPMI and UMass. Topics with fewer than two distinct
+in-vocabulary words have no word pairs and are excluded from the coherence
+averages; `topic_diagnostics` reports how many were excluded.
+"""
+
+import itertools
 import logging
-import random
+import re
 from typing import Any
 
 import numpy as np
 from bertopic import BERTopic
-from octis.evaluation_metrics.coherence_metrics import Coherence
-from octis.evaluation_metrics.diversity_metrics import InvertedRBO, TopicDiversity
+from gensim.corpora.dictionary import Dictionary
+from gensim.models.coherencemodel import CoherenceModel
+from octis.evaluation_metrics.diversity_metrics import get_word2index, rbo
+
+# Recorded with every result so rows scored under different rules are never
+# pooled. Rows without it were scored with padded topics and raw-text
+# tokenization for BERTopic variants.
+EVALUATION_PROTOCOL = "unpadded_2026_10"
+
+# Inverted RBO weight, matching OCTIS's InvertedRBO default.
+RBO_WEIGHT = 0.9
 
 
 def topic_words_to_octis(topic_words: list[list[str]]) -> dict[str, list[list[str]]]:
@@ -30,41 +49,37 @@ def get_top_words_from_beta(
     return topic_words
 
 
+def bertopic_preprocess(text: str) -> str:
+    """Applies BERTopic's c-TF-IDF preprocessing for English to one document.
+
+    Mirrors `BERTopic._preprocess_text`: tabs and newlines become spaces and
+    every other non-alphanumeric character is deleted, so "economy.no" becomes
+    "economyno". Topic words come from this text, so coherence must tokenize
+    it the same way.
+    """
+    text = text.replace("\n", " ").replace("\t", " ")
+    text = re.sub(r"[^A-Za-z0-9 ]+", "", text)
+    return text if text != "" else "emptydoc"
+
+
+def select_topic_words(words: list[Any], topk: int = 10) -> list[str]:
+    """Returns a topic's first `topk` non-empty, non-numeric words, unpadded."""
+    cleaned = [str(word).strip() for word in words]
+    return [word for word in cleaned if word != "" and not word.isdigit()][:topk]
+
+
 def bertopic_output_to_octis(m: BERTopic, topk: int = 10) -> dict[str, list[list[str]]]:
     """
     Reshapes BERTopic output so that it can be readily passed to OCTIS
     for evaluation.
     """
     topic_words: list[list[str]] = []
-    topic_ids = [
-        t_id
-        for t_id in m.get_topics().keys()
-        if t_id != -1  # Ignores noise topic
-    ]
-    for t_id in topic_ids:
+    for t_id in m.get_topics().keys():
+        if t_id == -1:  # Ignores noise topic
+            continue
         topic_info = m.get_topic(t_id)  # type: ignore
         if isinstance(topic_info, list):
-            # 1. Filter all available words first
-            words = [
-                str(word).strip()
-                for word, _ in topic_info
-                if str(word).strip() != "" and not str(word).strip().isdigit()
-            ]
-
-            # 2. Slice to topk
-            words = words[:topk]
-
-            # 3. If we STILL have less than topk, log it and pad by sampling
-            if 0 < len(words) < topk:
-                logger = logging.getLogger("pipeline")
-                logger.warning(
-                    f"Topic {t_id} only has {len(words)} words after filtering "
-                    f"(requested {topk}). Padding by sampling from existing words."
-                )
-                words.extend(random.choices(words, k=topk - len(words)))
-
-            topic_words.append(words)
-
+            topic_words.append(select_topic_words([w for w, _ in topic_info], topk))
     return {"topics": topic_words}
 
 
@@ -76,75 +91,125 @@ def tritopic_output_to_octis(m: Any, topk: int = 10) -> dict[str, list[list[str]
     topic_words: list[list[str]] = []
     if hasattr(m, "topics_"):
         for t in m.topics_:
-            t_id = getattr(t, "topic_id", None)
-            if t_id == -1:
+            if getattr(t, "topic_id", None) == -1:
                 continue
-            raw_keywords = getattr(t, "keywords", [])
-            words = [
-                str(word).strip()
-                for word in raw_keywords
-                if str(word).strip() != "" and not str(word).strip().isdigit()
-            ]
-            words = words[:topk]
-            if 0 < len(words) < topk:
-                words.extend(random.choices(words, k=topk - len(words)))
+            words = select_topic_words(getattr(t, "keywords", []), topk)
             if words:
                 topic_words.append(words)
     return {"topics": topic_words}
 
 
+def _scorable_topics(
+    topics: list[list[str]], dictionary: Dictionary, topk: int
+) -> list[list[str]]:
+    """Keeps each topic's distinct in-vocabulary words; drops topics with < 2."""
+    scorable = []
+    for topic in topics:
+        known = [w for w in dict.fromkeys(topic[:topk]) if w in dictionary.token2id]
+        if len(known) >= 2:
+            scorable.append(known)
+    return scorable
+
+
+def topic_diagnostics(
+    model_output: dict,
+    texts: list[list[str]] | None = None,
+    topk: int = 10,
+    dictionary: Dictionary | None = None,
+) -> dict[str, int]:
+    """Counts the topics that coherence scores only partially or not at all.
+
+    Returns:
+        n_topics_short: topics with fewer than `topk` words.
+        n_topics_unscored: topics with fewer than two distinct in-vocabulary
+            words, which are excluded from the coherence averages.
+        n_keywords_oov: distinct topic words absent from the evaluation corpus.
+    """
+    if dictionary is None:
+        dictionary = Dictionary(texts)
+    topics = model_output.get("topics") or []
+    keywords = {w for topic in topics for w in topic[:topk]}
+    return {
+        "n_topics_short": sum(len(topic) < topk for topic in topics),
+        "n_topics_unscored": len(topics)
+        - len(_scorable_topics(topics, dictionary, topk)),
+        "n_keywords_oov": len(keywords - set(dictionary.token2id)),
+    }
+
+
 def compute_coherence(
-    model_output: dict, texts: list[list[str]], measure: str = "c_npmi", topk: int = 10
+    model_output: dict,
+    texts: list[list[str]],
+    measure: str = "c_npmi",
+    topk: int = 10,
+    dictionary: Dictionary | None = None,
 ) -> float:
+    """Mean per-topic coherence over the topics that have word pairs.
+
+    Equivalent to OCTIS's Coherence for topics with `topk` in-vocabulary
+    words. Shorter topics are scored on their own distinct words; topics with
+    fewer than two are excluded. Returns NaN when no topic can be scored.
+
+    Args:
+        model_output: Dictionary with a "topics" list of word lists.
+        texts: Tokenized evaluation corpus.
+        measure: Gensim coherence measure ("c_npmi", "c_v", "u_mass", ...).
+        topk: Number of top words per topic to consider.
+        dictionary: Optional prebuilt gensim Dictionary of `texts`, for reuse
+            across measures.
+    """
     logger = logging.getLogger("pipeline")
 
-    # Check if there are any topics to evaluate
     if not model_output.get("topics"):
         logger.warning(f"No topics found for evaluation of {measure}. Returning 0.0")
         return 0.0
 
-    # Ensure all topic words are present in the dictionary/texts
-    # and that topics are not empty lists.
-    filtered_topics = [t for t in model_output["topics"] if len(t) > 0]
-    if len(filtered_topics) < len(model_output["topics"]):
+    if dictionary is None:
+        dictionary = Dictionary(texts)
+    topics = model_output["topics"]
+    scorable = _scorable_topics(topics, dictionary, topk)
+    if len(scorable) < len(topics):
         logger.warning(
-            f"Removed {len(model_output['topics']) - len(filtered_topics)} "
-            "empty topics."
+            f"Excluded {len(topics) - len(scorable)} of {len(topics)} topics from "
+            f"{measure}: fewer than two distinct in-vocabulary words."
         )
+    if not scorable:
+        return float("nan")
 
-    if not filtered_topics:
-        logger.warning(
-            f"No non-empty topics found for evaluation of {measure}. Returning 0.0"
-        )
-        return 0.0
-
-    model_output["topics"] = filtered_topics
-
-    coherence_model = Coherence(texts=texts, topk=topk, measure=measure)
-    try:
-        return coherence_model.score(model_output)
-    except IndexError as e:
-        logger.error(
-            f"Error when computing coherence ({measure}). "
-            f"Model output topics:\n{model_output['topics']}"
-        )
-        raise e
-    except ValueError as e:
-        logger.error(
-            f"Error when computing coherence ({measure}). "
-            f"Model output topics:\n{model_output['topics']}"
-        )
-        # Log a few examples of texts to help debugging without flooding the log
-        if texts:
-            logger.error(f"First 5 tokenized texts: {texts[:5]}")
-        raise e
+    per_topic = CoherenceModel(
+        topics=scorable,
+        texts=texts,
+        dictionary=dictionary,
+        coherence=measure,
+        processes=1,
+        topn=topk,
+    ).get_coherence_per_topic()
+    return float(np.mean(per_topic))
 
 
-def compute_diversity(diversity_type: str, model_output: dict) -> float:
+def compute_diversity(diversity_type: str, model_output: dict, topk: int = 10) -> float:
+    """Topic Diversity or Inverted RBO over each topic's top words.
+
+    Same formulas as OCTIS, without its requirement that the first topic have
+    `topk` words. Topic Diversity keeps the K * topk denominator, so short
+    topics lower it.
+    """
+    topics = [topic[:topk] for topic in model_output.get("topics") or []]
+    if diversity_type == "topic_diversity":
+        if not topics:
+            return 0.0
+        unique_words = set(itertools.chain.from_iterable(topics))
+        return len(unique_words) / (topk * len(topics))
     if diversity_type == "irbo":
-        diversity_model = InvertedRBO()
-    elif diversity_type == "topic_diversity":
-        diversity_model = TopicDiversity()
-    else:
-        raise ValueError(f"Invalid diversity type: {diversity_type}")
-    return diversity_model.score(model_output=model_output)  # type: ignore
+        overlaps = []
+        for list1, list2 in itertools.combinations(topics, 2):
+            word2index = get_word2index(list1, list2)
+            overlaps.append(
+                rbo(
+                    [word2index[w] for w in list1],
+                    [word2index[w] for w in list2],
+                    p=RBO_WEIGHT,
+                )[2]
+            )
+        return float(1 - np.mean(overlaps)) if overlaps else float("nan")
+    raise ValueError(f"Invalid diversity type: {diversity_type}")

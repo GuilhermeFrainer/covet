@@ -314,6 +314,10 @@ def main():
                         "duration_seconds": duration,
                         "n_topics": k,
                         "outliers": 0,  # STM doesn't really have outliers like HDBSCAN
+                        **evaluation.topic_diagnostics(
+                            octis_output, texts=tokenized_texts
+                        ),
+                        "evaluation_protocol": evaluation.EVALUATION_PROTOCOL,
                     }
 
                     # Coherence Loop

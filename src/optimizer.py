@@ -499,6 +499,9 @@ class Optimizer:
             "requested_topics",
             "n_topics",
             "outliers",
+            "n_topics_short",
+            "n_topics_unscored",
+            "n_keywords_oov",
         ]
 
         # Calculated metrics from the experiment config
@@ -512,6 +515,7 @@ class Optimizer:
             )
         # Descriptive topic–metadata alignment (see src/metadata_alignment.py).
         exp_metrics.append("meta_ami_mean")
+        exp_metrics.append("evaluation_protocol")
 
         provenance_cols = run_provenance.PROVENANCE_COLUMNS
 

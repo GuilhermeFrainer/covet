@@ -22,6 +22,48 @@ class PreparedData:
         return iter((self.text, self.embeddings, self.metadata))
 
 
+def resolve_dataset_path(data_path: str) -> str:
+    """Returns the dataset path, falling back to the local Yelp sample file.
+
+    Yelp configs name `yelp_embeddings.parquet`; local checkouts may hold only
+    the equivalent `yelp_s10000_embeddings.parquet`.
+    """
+    from pathlib import Path
+
+    if not Path(data_path).exists() and "yelp_embeddings" in data_path:
+        fallback = Path("data/processed/yelp_s10000_embeddings.parquet")
+        if fallback.exists():
+            logging.getLogger("pipeline").info(
+                f"Primary dataset '{data_path}' not found. "
+                f"Falling back to '{fallback}'."
+            )
+            return str(fallback)
+    return data_path
+
+
+def filter_empty_text(lf: pl.LazyFrame, text_col: str) -> pl.LazyFrame:
+    """Drops rows whose text is null or only whitespace."""
+    return lf.filter(pl.col(text_col).str.strip_chars() != "")
+
+
+def load_texts(config: dict, random_state: int) -> list[str]:
+    """Loads the exact document texts a run trained on, without embeddings.
+
+    Applies the same path resolution, empty-text filter and seeded sampling
+    as `load_and_prep_data`.
+    """
+    experiment_config = config["experiment"]
+    text_col = experiment_config.get("text_col", "text")
+    lf = filter_empty_text(
+        pl.scan_parquet(resolve_dataset_path(experiment_config["dataset_path"])),
+        text_col,
+    )
+    sample_size = experiment_config.get("sample_size")
+    if sample_size is not None:
+        lf = sample_from_lf(lf, n=sample_size, seed=random_state)
+    return lf.select(text_col).collect()[text_col].to_list()
+
+
 def load_and_prep_data(
     config: dict, random_state: int, *, return_prepared: bool = False
 ) -> tuple[list[str], np.ndarray, pl.DataFrame] | PreparedData:
@@ -44,15 +86,7 @@ def load_and_prep_data(
 
     from pathlib import Path
 
-    if not Path(data_path).exists():
-        if "yelp_embeddings" in data_path:
-            fallback = Path("data/processed/yelp_s10000_embeddings.parquet")
-            if fallback.exists():
-                logger.info(
-                    f"Primary dataset '{data_path}' not found. "
-                    f"Falling back to '{fallback}'."
-                )
-                data_path = str(fallback)
+    data_path = resolve_dataset_path(data_path)
 
     # Lazy load
     full_lf = pl.scan_parquet(data_path)
@@ -83,7 +117,7 @@ def load_and_prep_data(
     total_len = full_lf.select(pl.len()).collect().item()
 
     # Filter empty rows immediately
-    clean_lf = full_lf.filter(pl.col(text_col).str.strip_chars() != "")
+    clean_lf = filter_empty_text(full_lf, text_col)
 
     # Calculate length after filtering
     clean_len = clean_lf.select(pl.len()).collect().item()
