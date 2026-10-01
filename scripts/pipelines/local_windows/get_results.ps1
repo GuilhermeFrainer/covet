@@ -43,6 +43,11 @@ $resultTypesToProcess = if ($ResultType -eq "all") { @("standard", "stemmed", "n
 # List of datasets
 $datasets = $Datasets
 
+# Model ablation design table (catalog-only; independent of result type and dataset)
+Write-Host "Generating Model Ablation Table..." -ForegroundColor Yellow
+$modelAblationTablePath = Join-Path $tablesDir "model_ablations.tex"
+uv run scripts/analysis/make_model_table.py --latex "$modelAblationTablePath"
+
 foreach ($resType in $resultTypesToProcess) {
     Write-Host "`n============================================================" -ForegroundColor Magenta
     Write-Host " PROCESSING RESULT TYPE: $($resType.ToUpper())" -ForegroundColor Magenta

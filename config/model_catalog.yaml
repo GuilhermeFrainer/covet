@@ -10,6 +10,9 @@ models:
     baseline_id: baseline
     reduction: aligned_umap
     clustering: hdbscan
+    short_label: "Aligned UMAP"
+    latex_label: '$\text{\systemshort}_3$'
+    change: "Replaces UMAP with Aligned UMAP across the text and metadata views."
   aligned_umap_mv_k_means:
     label: Aligned UMAP + Multi-View K-Means
     priority: secondary
@@ -34,6 +37,9 @@ models:
     baseline_id: baseline
     reduction: append_umap
     clustering: hdbscan
+    short_label: "Append UMAP"
+    latex_label: 'Naive'
+    change: "Concatenates scaled, unweighted metadata to the text embeddings before UMAP."
   append_umap_w000:
     label: BERTopic with weighted Append UMAP (w=0, metadata ignored; parity check).
     priority: primary
@@ -42,6 +48,9 @@ models:
     baseline_id: baseline
     reduction: append_umap
     clustering: hdbscan
+    short_label: "Weighted Append UMAP (w = 0)"
+    latex_label: '$\text{\systemshort}_9^{w=0}$'
+    change: "Distance-balances text and metadata blocks before Euclidean UMAP; w = 0 ignores metadata (parity check)."
   append_umap_w005:
     label: BERTopic with weighted Append UMAP (w=0.05).
     priority: primary
@@ -50,6 +59,9 @@ models:
     baseline_id: baseline
     reduction: append_umap
     clustering: hdbscan
+    short_label: "Weighted Append UMAP (w = 0.05)"
+    latex_label: '$\text{\systemshort}_9^{w=0.05}$'
+    change: "Distance-balanced Append UMAP with metadata weight w = 0.05."
   append_umap_w010:
     label: BERTopic with weighted Append UMAP (w=0.1).
     priority: primary
@@ -58,6 +70,9 @@ models:
     baseline_id: baseline
     reduction: append_umap
     clustering: hdbscan
+    short_label: "Weighted Append UMAP (w = 0.1)"
+    latex_label: '$\text{\systemshort}_9^{w=0.1}$'
+    change: "Distance-balanced Append UMAP with metadata weight w = 0.1."
   append_umap_w020:
     label: BERTopic with weighted Append UMAP (w=0.2).
     priority: primary
@@ -66,6 +81,9 @@ models:
     baseline_id: baseline
     reduction: append_umap
     clustering: hdbscan
+    short_label: "Weighted Append UMAP (w = 0.2)"
+    latex_label: '$\text{\systemshort}_9^{w=0.2}$'
+    change: "Distance-balanced Append UMAP with metadata weight w = 0.2."
   append_umap_w030:
     label: BERTopic with weighted Append UMAP (w=0.3).
     priority: primary
@@ -74,6 +92,9 @@ models:
     baseline_id: baseline
     reduction: append_umap
     clustering: hdbscan
+    short_label: "Weighted Append UMAP (w = 0.3)"
+    latex_label: '$\text{\systemshort}_9^{w=0.3}$'
+    change: "Distance-balanced Append UMAP with metadata weight w = 0.3."
   append_umap_w050:
     label: BERTopic with weighted Append UMAP (w=0.5).
     priority: primary
@@ -82,6 +103,9 @@ models:
     baseline_id: baseline
     reduction: append_umap
     clustering: hdbscan
+    short_label: "Weighted Append UMAP (w = 0.5)"
+    latex_label: '$\text{\systemshort}_9^{w=0.5}$'
+    change: "Distance-balanced Append UMAP with metadata weight w = 0.5."
   append_umap_mv_co_reg_spectral:
     label: Append UMAP + Multi-View Co-Regularized Spectral Clustering
     priority: secondary
@@ -138,6 +162,9 @@ models:
     baseline_id: null
     reduction: umap
     clustering: hdbscan
+    short_label: "UMAP + HDBSCAN"
+    latex_label: '$\text{BERTopic}_1$'
+    change: "Text-only reference; no metadata."
   decoupled_mv_k_means:
     label: UMAP + Decoupled Multi-View K-Means (Cosine Text + Euclidean Metadata)
     priority: secondary
@@ -155,6 +182,9 @@ models:
     baseline_id: umap_spectral
     reduction: umap
     clustering: decoupled_multi_view_spectral_clustering
+    short_label: "Decoupled MV Spectral"
+    latex_label: '$\text{\systemshort}_4$'
+    change: "Multi-view spectral clustering with view-specific affinities: cosine kNN on text, Euclidean RBF on metadata."
   fast_tritopic:
     label: Fast TriTopic multi-view graph topic model with vectorized graph construction.
     priority: primary
@@ -163,6 +193,8 @@ models:
     baseline_id: null
     reduction: none
     clustering: none
+    short_label: "FastTriTopic"
+    change: "TriTopic with vectorized graph construction."
   feature_stacking_hdbscan:
     label: UMAP + Feature-Stacking HDBSCAN
     priority: primary
@@ -171,6 +203,9 @@ models:
     baseline_id: baseline
     reduction: umap
     clustering: feature_stacking_hdbscan
+    short_label: "Feature-Stacking HDBSCAN"
+    latex_label: '$\text{\systemshort}_8$'
+    change: "Runs HDBSCAN on standardized, horizontally stacked text and metadata views."
   k_means:
     label: UMAP + K-Means
     priority: secondary
@@ -187,6 +222,9 @@ models:
     baseline_id: umap_spectral
     reduction: umap
     clustering: co_regularized_multi_view_spectral_clustering
+    short_label: "Co-Reg. MV Spectral"
+    latex_label: '$\text{\systemshort}_1$'
+    change: "Replaces single-view spectral clustering with co-regularized multi-view spectral clustering over the text and metadata views."
   mv_co_reg_spectral_info0:
     label: Multi-View Co-Regularized Spectral Clustering (info_view=0)
     priority: primary
@@ -195,6 +233,9 @@ models:
     baseline_id: umap_spectral
     reduction: umap
     clustering: co_regularized_multi_view_spectral_clustering
+    short_label: "Co-Reg. MV Spectral (info_view = 0)"
+    latex_label: '$\text{\systemshort}_1\text{-info0}$'
+    change: "As Co-Reg. MV Spectral, but the final clustering uses the text view's embedding only."
   mv_hdbscan:
     label: UMAP + MV-HDBSCAN
     priority: primary
@@ -203,6 +244,9 @@ models:
     baseline_id: baseline
     reduction: umap
     clustering: multi_view_hdbscan
+    short_label: "MV-HDBSCAN"
+    latex_label: '$\text{\systemshort}_7$'
+    change: "Replaces HDBSCAN with multi-view HDBSCAN over the text and metadata views."
     aliases:
     - umap_mv_hdbscan
     - multi_view_hdbscan
@@ -230,6 +274,9 @@ models:
     baseline_id: umap_spectral
     reduction: umap
     clustering: multi_view_spectral_clustering
+    short_label: "MV Spectral"
+    latex_label: '$\text{\systemshort}_2$'
+    change: "Replaces single-view spectral clustering with multi-view spectral clustering over the text and metadata views; affinity construction also differs."
   mv_spectral_info0:
     label: Multi-View Spectral Clustering (info_view=0)
     priority: primary
@@ -238,6 +285,9 @@ models:
     baseline_id: umap_spectral
     reduction: umap
     clustering: multi_view_spectral_clustering
+    short_label: "MV Spectral (info_view = 0)"
+    latex_label: '$\text{\systemshort}_2\text{-info0}$'
+    change: "As MV Spectral, but the final clustering uses the text view's embedding only."
   mv_spectral_l2_norm:
     label: UMAP + Multi-View Spectral Clustering (L2-Normalized Text View)
     priority: primary
@@ -246,6 +296,9 @@ models:
     baseline_id: umap_spectral
     reduction: umap
     clustering: multi_view_spectral_clustering
+    short_label: "MV Spectral (L2-normalized text)"
+    latex_label: '$\text{\systemshort}_2\text{-L2}$'
+    change: "As MV Spectral, with an L2-normalized text view."
   mv_spherical_k_means:
     label: UMAP + Multi-View Spherical K-Means
     priority: secondary
@@ -270,6 +323,9 @@ models:
     baseline_id: null
     reduction: pca
     clustering: k_means
+    short_label: "PCA + K-Means"
+    latex_label: '$\text{BERTopic}_3$'
+    change: "Text-only reference; no metadata."
   pca_mv_co_reg_spectral:
     label: PCA + Multi-View Co-Regularized Spectral Clustering
     priority: secondary
@@ -294,6 +350,9 @@ models:
     baseline_id: pca_k_means
     reduction: pca
     clustering: multi_view_k_means
+    short_label: "PCA + MV K-Means"
+    latex_label: '$\text{\systemshort}_5$'
+    change: "Replaces K-Means with multi-view K-Means over the text and metadata views."
   pca_mv_spectral:
     label: PCA + Multi-View Spectral Clustering
     priority: secondary
@@ -318,6 +377,9 @@ models:
     baseline_id: pca_k_means
     reduction: pca
     clustering: multi_view_spherical_k_means
+    short_label: "PCA + MV Spherical K-Means"
+    latex_label: '$\text{\systemshort}_6$'
+    change: "Replaces K-Means with multi-view spherical (cosine) K-Means over the text and metadata views."
   pca_spectral:
     label: PCA + Single-View Spectral Clustering
     priority: secondary
@@ -334,6 +396,8 @@ models:
     baseline_id: null
     reduction: none
     clustering: none
+    short_label: "STM"
+    change: "Structural Topic Model with document covariates."
   tritopic:
     label: TriTopic multi-view graph topic model with consensus Leiden clustering.
     priority: primary
@@ -342,6 +406,8 @@ models:
     baseline_id: null
     reduction: none
     clustering: none
+    short_label: "TriTopic"
+    change: "Multi-view graph topic model with consensus Leiden clustering."
   umap_spectral:
     label: UMAP + Spectral
     priority: primary
@@ -350,3 +416,6 @@ models:
     baseline_id: null
     reduction: umap
     clustering: spectral_clustering
+    short_label: "UMAP + Spectral"
+    latex_label: '$\text{BERTopic}_2$'
+    change: "Text-only reference; no metadata."

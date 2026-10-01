@@ -45,14 +45,16 @@ def load_catalog(path=CATALOG_PATH):
         raise ValueError("Catalog models must be a nonempty mapping")
     aliases = set(models)
     required = {"label", "priority", "role", "family", "baseline_id", "reduction", "clustering"}
+    optional_text = {"short_label", "latex_label", "change"}
     for model_id, entry in models.items():
         if not isinstance(model_id, str) or not isinstance(entry, dict):
             raise ValueError("Model identifiers and entries must be strings and mappings")
-        if not required <= entry.keys() or entry.keys() - required - {"aliases"}:
+        allowed = required | optional_text | {"aliases"}
+        if not required <= entry.keys() or entry.keys() - allowed:
             raise ValueError(f"Invalid fields for {model_id}")
         if any(
             not isinstance(entry[field], str) or not entry[field]
-            for field in required - {"baseline_id"}
+            for field in (required - {"baseline_id"}) | (optional_text & entry.keys())
         ):
             raise ValueError(f"Model fields must be nonempty strings: {model_id}")
         if not isinstance(entry.get("aliases", []), list) or any(

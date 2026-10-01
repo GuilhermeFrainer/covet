@@ -1,3 +1,4 @@
+import re
 from typing import Optional
 
 import polars as pl
@@ -159,10 +160,10 @@ def generate_best_models_latex_table(
         "mv_spectral": "$\\text{\\systemshort}_2$",
         "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
         "aligned_umap": "$\\text{\\systemshort}_3$",
-        "mv_hdbscan": "$\\text{\\systemshort}_{\\text{HDBSCAN}}$",
-        "multi_view_hdbscan": "$\\text{\\systemshort}_{\\text{HDBSCAN}}$",
-        "feature_stacking_hdbscan": "$\\text{Stacked-HDBSCAN}$",
-        "stacked_hdbscan": "$\\text{Stacked-HDBSCAN}$",
+        "mv_hdbscan": "$\\text{\\systemshort}_7$",
+        "multi_view_hdbscan": "$\\text{\\systemshort}_7$",
+        "feature_stacking_hdbscan": "$\\text{\\systemshort}_8$",
+        "stacked_hdbscan": "$\\text{\\systemshort}_8$",
         "stm": "STM",
     }
 
@@ -421,10 +422,10 @@ def generate_stopword_impact_latex_table(
         "mv_spectral": "$\\text{\\systemshort}_2$",
         "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
         "aligned_umap": "$\\text{\\systemshort}_3$",
-        "mv_hdbscan": "$\\text{\\systemshort}_{\\text{HDBSCAN}}$",
-        "multi_view_hdbscan": "$\\text{\\systemshort}_{\\text{HDBSCAN}}$",
-        "feature_stacking_hdbscan": "$\\text{Stacked-HDBSCAN}$",
-        "stacked_hdbscan": "$\\text{Stacked-HDBSCAN}$",
+        "mv_hdbscan": "$\\text{\\systemshort}_7$",
+        "multi_view_hdbscan": "$\\text{\\systemshort}_7$",
+        "feature_stacking_hdbscan": "$\\text{\\systemshort}_8$",
+        "stacked_hdbscan": "$\\text{\\systemshort}_8$",
         "stm": "STM",
     }
 
@@ -673,10 +674,10 @@ def generate_demsar_delta_latex_table(
         "mv_spectral": "$\\text{\\systemshort}_2$",
         "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
         "aligned_umap": "$\\text{\\systemshort}_3$",
-        "mv_hdbscan": "$\\text{\\systemshort}_{\\text{HDBSCAN}}$",
-        "multi_view_hdbscan": "$\\text{\\systemshort}_{\\text{HDBSCAN}}$",
-        "feature_stacking_hdbscan": "$\\text{Stacked-HDBSCAN}$",
-        "stacked_hdbscan": "$\\text{Stacked-HDBSCAN}$",
+        "mv_hdbscan": "$\\text{\\systemshort}_7$",
+        "multi_view_hdbscan": "$\\text{\\systemshort}_7$",
+        "feature_stacking_hdbscan": "$\\text{\\systemshort}_8$",
+        "stacked_hdbscan": "$\\text{\\systemshort}_8$",
         "stm": "STM",
     }
 
@@ -985,10 +986,10 @@ def generate_demsar_all_vs_all_latex_table(
         "mv_spectral": "$\\text{\\systemshort}_2$",
         "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
         "aligned_umap": "$\\text{\\systemshort}_3$",
-        "mv_hdbscan": "$\\text{\\systemshort}_{\\text{HDBSCAN}}$",
-        "multi_view_hdbscan": "$\\text{\\systemshort}_{\\text{HDBSCAN}}$",
-        "feature_stacking_hdbscan": "$\\text{Stacked-HDBSCAN}$",
-        "stacked_hdbscan": "$\\text{Stacked-HDBSCAN}$",
+        "mv_hdbscan": "$\\text{\\systemshort}_7$",
+        "multi_view_hdbscan": "$\\text{\\systemshort}_7$",
+        "feature_stacking_hdbscan": "$\\text{\\systemshort}_8$",
+        "stacked_hdbscan": "$\\text{\\systemshort}_8$",
         "stm": "STM",
     }
 
@@ -1741,3 +1742,207 @@ def style_demsar_pairwise_matrix(
 
     style_fn = getattr(df.style, "map", None) or getattr(df.style, "applymap")
     return style_fn(style_cell)
+
+
+# ==============================================================================
+# Model Ablation Design Table
+# ==============================================================================
+
+LATEX_SPECIAL_CHARS = {
+    "\\": r"\textbackslash{}",
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
+
+ABLATION_FAMILY_ORDER = ("hdbscan", "spectral", "k_means", "external")
+
+WEIGHTED_APPEND_PATTERN = re.compile(r"append_umap_w\d+$")
+
+COMPONENT_DISPLAY_NAMES = {
+    "umap": "UMAP",
+    "pca": "PCA",
+    "append_umap": "Append UMAP",
+    "aligned_umap": "Aligned UMAP",
+    "hdbscan": "HDBSCAN",
+    "k_means": "K-Means",
+    "spectral_clustering": "spectral clustering",
+    "multi_view_hdbscan": "multi-view HDBSCAN",
+    "feature_stacking_hdbscan": "feature-stacking HDBSCAN",
+    "multi_view_k_means": "multi-view K-Means",
+    "multi_view_spherical_k_means": "multi-view spherical K-Means",
+    "decoupled_multi_view_k_means": "decoupled multi-view K-Means",
+    "multi_view_spectral_clustering": "multi-view spectral clustering",
+    "co_regularized_multi_view_spectral_clustering": (
+        "co-regularized multi-view spectral clustering"
+    ),
+    "decoupled_multi_view_spectral_clustering": (
+        "decoupled multi-view spectral clustering"
+    ),
+}
+
+
+def latex_escape(text: str) -> str:
+    """Escapes LaTeX special characters in plain text."""
+    return "".join(LATEX_SPECIAL_CHARS.get(char, char) for char in text)
+
+
+def _catalog_label(entry: dict) -> str:
+    """Returns the paper label of a catalog entry, falling back to its label."""
+    return entry.get("short_label") or entry["label"].rstrip(".")
+
+
+def _catalog_latex_label(entry: dict) -> str:
+    """Returns the LaTeX symbol of a catalog entry, or its escaped paper label."""
+    return entry.get("latex_label") or latex_escape(_catalog_label(entry))
+
+
+def _ablation_sort_key(entry: dict) -> tuple:
+    """Orders baselines first, then system labels by number, then other labels."""
+    label = _catalog_latex_label(entry)
+    natural = re.sub(r"\d+(?:\.\d+)?", lambda m: f"{float(m.group()):010.3f}", label)
+    return entry["role"] == "ablation", r"\systemshort" not in label, natural
+
+
+def _component_change(entry: dict, baseline: dict) -> str:
+    """Describes which architectural components differ from the baseline."""
+    changes = []
+    for component in ("reduction", "clustering"):
+        before, after = baseline[component], entry[component]
+        if before != after:
+            before = COMPONENT_DISPLAY_NAMES.get(before, before.replace("_", " "))
+            after = COMPONENT_DISPLAY_NAMES.get(after, after.replace("_", " "))
+            changes.append(f"{component} ({before} to {after})")
+    if not changes:
+        return "Same components as the baseline; differs in configuration."
+    return "Changes " + " and ".join(changes) + "."
+
+
+
+
+def generate_model_ablation_rows(
+    models: dict,
+    include_secondary: bool = False,
+    include_external: bool = False,
+    include_weighted_append: bool = False,
+) -> list[dict]:
+    """Selects catalog models and pairs each ablation with its reference baseline.
+
+    Args:
+        models: Validated catalog mapping returned by
+            `src.model_catalog.load_catalog`.
+        include_secondary: If True, also includes secondary-priority models.
+            Their baselines can differ in more than one component.
+        include_external: If True, appends external baselines (STM, TriTopic).
+        include_weighted_append: If True, includes the weighted Append UMAP
+            variants (`append_umap_w*`).
+
+    Returns:
+        A list of row dictionaries grouped by family with each reference baseline
+        first. `model` and `change` are plain text; `label` and `ablates_on` are
+        LaTeX. `ablates_on` is None for baselines.
+    """
+    rows = []
+    for family in ABLATION_FAMILY_ORDER:
+        if family == "external" and not include_external:
+            continue
+        selected = [
+            (model_id, entry)
+            for model_id, entry in models.items()
+            if entry["family"] == family
+            and (include_secondary or entry["priority"] == "primary")
+            and (include_weighted_append or not WEIGHTED_APPEND_PATTERN.match(model_id))
+        ]
+        selected.sort(key=lambda item: _ablation_sort_key(item[1]))
+        for model_id, entry in selected:
+            baseline = models.get(entry["baseline_id"])
+            if baseline is not None:
+                change = entry.get("change") or _component_change(entry, baseline)
+            elif entry["role"] == "external_baseline":
+                change = entry.get("change") or "External baseline."
+            else:
+                change = entry.get("change") or "Reference baseline."
+            rows.append({
+                "family": family,
+                "model_id": model_id,
+                "label": _catalog_latex_label(entry),
+                "model": _catalog_label(entry),
+                "ablates_on": _catalog_latex_label(baseline) if baseline else None,
+                "change": change,
+            })
+    return rows
+
+
+def generate_model_ablation_latex_table(
+    models: dict,
+    include_secondary: bool = False,
+    include_external: bool = False,
+    include_weighted_append: bool = False,
+    include_changes: bool = False,
+) -> str:
+    """Generates a LaTeX table of proposed models and the baselines they ablate.
+
+    By default the table has Label, Model, and Ablates on columns and fits one
+    column of a two-column layout. With `include_changes`, it adds a What changes
+    column and spans both columns (`table*`).
+
+    Args:
+        models: Validated catalog mapping returned by
+            `src.model_catalog.load_catalog`.
+        include_secondary: If True, also includes secondary-priority models.
+        include_external: If True, appends external baselines (STM, TriTopic).
+        include_weighted_append: If True, includes the weighted Append UMAP
+            variants.
+        include_changes: If True, adds the What changes column.
+
+    Returns:
+        A LaTeX table string requiring the booktabs, tabularx, and amsmath
+        packages and the systemshort macro.
+    """
+    rows = generate_model_ablation_rows(
+        models, include_secondary, include_external, include_weighted_append
+    )
+    environment = "table*" if include_changes else "table"
+    # Labels are unbreakable math, so their columns take their natural width.
+    if include_changes:
+        columns = r"@{}lp{0.22\linewidth}lX@{}"
+        header = r"    Label & Model & Ablates on & What changes \\"
+    else:
+        columns = r"@{}lXl@{}"
+        header = r"    Label & Model & Ablates on \\"
+    lines = [
+        rf"\begin{{{environment}}}[htbp]",
+        r"\centering",
+        r"\small",
+        r"\setlength{\tabcolsep}{4pt}",
+        r"\caption{Proposed \systemshort{} variants and the reference baseline "
+        r"each one ablates.}",
+        r"\label{tab:model_ablations}",
+        rf"\begin{{tabularx}}{{\linewidth}}{{{columns}}}",
+        r"    \toprule",
+        header,
+        r"    \midrule",
+    ]
+    previous_family = None
+    for row in rows:
+        if previous_family is not None and row["family"] != previous_family:
+            lines.append(r"    \midrule")
+        previous_family = row["family"]
+        # \raggedright avoids stretched spacing in narrow paragraph columns; it
+        # redefines \, so rows end with \tabularnewline.
+        cells = [
+            row["label"],
+            rf"\raggedright {latex_escape(row['model'])}",
+            row["ablates_on"] or "---",
+        ]
+        if include_changes:
+            cells.append(rf"\raggedright {latex_escape(row['change'])}")
+        lines.append("    " + " & ".join(cells) + r" \tabularnewline")
+    lines.extend([r"    \bottomrule", r"\end{tabularx}", rf"\end{{{environment}}}"])
+    return "\n".join(lines)

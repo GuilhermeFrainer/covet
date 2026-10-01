@@ -23,9 +23,9 @@ MODEL_RENAME_MAP = {
     "mv_spectral": "{model_name}<sub>2</sub>",
     "mv_spectral_info0": "{model_name}<sub>2-info0</sub>",
     "aligned_umap": "{model_name}<sub>3</sub>",
-    "mv_hdbscan": "{model_name}<sub>HDBSCAN</sub>",
-    "feature_stacking_hdbscan": "Stacked-HDBSCAN",
-    "stacked_hdbscan": "Stacked-HDBSCAN",
+    "mv_hdbscan": "{model_name}<sub>7</sub>",
+    "feature_stacking_hdbscan": "{model_name}<sub>8</sub>",
+    "stacked_hdbscan": "{model_name}<sub>8</sub>",
     "stm": "STM",
 }
 
