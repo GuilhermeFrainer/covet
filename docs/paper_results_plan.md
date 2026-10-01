@@ -193,7 +193,16 @@ Both sanity checks were finished on 2026-10-01. **The RQ1 dashboard work below w
     - One dataset + one k: per-seed values, realized topic count and noise share.
   - **Heatmap**: comparisons × the 25 dataset × topic-count cells, coloured by the seed-averaged Δ of the selected metric, with realized topic counts in the tooltip.
   - Label all single-slice p-values "exploratory". Show realized topic counts (HDBSCAN requested ≠ realized, e.g. Gadarian ≈ 13).
-- Deferred to after the meeting: LaTeX table and figure generators for the paper; wiring in the recomputed metrics.
+- **Remaining for the 2026-10-02 8:00–10:00 slot** (from the original pre-meeting list; the dashboard work was done the evening before):
+  - [x] Paper output generators (done the evening of 2026-10-01): `uv run python scripts/analysis/make_paper_outputs.py` writes to `tables/paper/` (git-ignored):
+    - `hdbscan_ablation.tex`: mean Δ with W/T/L for $C_\text{NPMI}$, $C_V$, IRBO and Diversity, plus Δ realized topics and Δ noise share, against UMAP + HDBSCAN
+    - `hdbscan_ablation_stats.tex`: rank-biserial r and Holm p (Holm across the 4 HDBSCAN variants)
+    - `tradeoff.{pdf,png}`: dataset-level Δ NPMI vs Δ Topic Diversity
+    - `dose_response.{pdf,png}`: weighted Append, Δ NPMI / Diversity / noise share / AMI against w
+    - Marked "Preliminary" automatically until every standard row has `evaluation_protocol = unpadded_2026_10`. Tested; the tables compile with pdflatex.
+  - [ ] After the meeting: the descriptive benchmark table with TriTopic (average ranks).
+  - [ ] 8:45–9:15: make the dashboard and comparisons read `results/derived/topic_metrics_recomputed.csv` when present (only if the user ran the recompute).
+  - [ ] 9:15–10:00: review the dashboard and the outputs together.
 - Deferred to the weekend (user): run the recompute, merge the Trump raw files, optional runs (weighted Append on Fed/Trump, Trump TriTopic), paper writing.
 
 ## Log
