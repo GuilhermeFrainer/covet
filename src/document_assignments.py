@@ -16,6 +16,26 @@ import polars as pl
 from src import metadata_alignment, run_provenance, utils
 
 
+def requested_topic_setting(model_config):
+    """Returns the topic count a configuration requests, or None if it has none.
+
+    BERTopic variants request topics through `bertopic.params.nr_topics`,
+    clustering-based variants through `clustering.params.n_clusters`, and
+    TriTopic variants through `params.n_topics`.
+    """
+    params = model_config.get("params", {})
+    return (
+        model_config.get("bertopic", {})
+        .get("params", {})
+        .get(
+            "nr_topics",
+            model_config.get("clustering", {})
+            .get("params", {})
+            .get("n_clusters", params.get("n_topics", params.get("n_clusters"))),
+        )
+    )
+
+
 def file_checksum(path):
     digest = hashlib.sha256()
     with open(path, "rb") as source:
@@ -164,19 +184,7 @@ class AssignmentRun:
             "resolved_config": config,
             "input": prepared.provenance,
             "metadata_condition": "observed",
-            "requested_topic_setting": model_config.get("bertopic", {})
-            .get("params", {})
-            .get(
-                "nr_topics",
-                model_config.get("clustering", {})
-                .get("params", {})
-                .get(
-                    "n_clusters",
-                    model_config.get("params", {}).get(
-                        "n_topics", model_config.get("params", {}).get("n_clusters")
-                    ),
-                ),
-            ),
+            "requested_topic_setting": requested_topic_setting(model_config),
             "assignment_semantics": "hard_cluster",
             "strength_kind": None,
             "fit_status": "pending",

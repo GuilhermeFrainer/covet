@@ -11,7 +11,7 @@ import polars as pl
 import src.models as models
 import src.run_provenance as run_provenance
 import src.training as training
-from src.document_assignments import AssignmentRun
+from src.document_assignments import AssignmentRun, requested_topic_setting
 
 
 def collect_hyperparameters(
@@ -380,11 +380,21 @@ class Optimizer:
                         "timestamp": start_timestamp,
                         "file_timestamp": self.file_timestamp,
                         "dataset_name": dataset_name,
+                        "requested_topics": requested_topic_setting(model_config),
                     }
                     if assignment_run is not None:
                         run_metadata.update(assignment_run.links)
+                    # Measured values win over same-named grid parameters:
+                    # TriTopic's `n_topics` parameter would otherwise replace
+                    # the realized topic count. `requested_topics` keeps the
+                    # requested value.
+                    reported_params = {
+                        key: value
+                        for key, value in cleaned_varied_params.items()
+                        if key not in metrics
+                    }
                     metrics.update(run_metadata)
-                    metrics.update(cleaned_varied_params)
+                    metrics.update(reported_params)
 
                     # 3b. Collect Provenance from fitted model and config
                     provenance = run_provenance.collect_run_provenance(
@@ -486,6 +496,7 @@ class Optimizer:
             "clustering_algo",
             "dim_red_algo",
             "duration_seconds",
+            "requested_topics",
             "n_topics",
             "outliers",
         ]

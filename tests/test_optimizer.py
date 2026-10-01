@@ -302,3 +302,60 @@ def test_optimizer_run_baseline_with_scaled_metadata():
     assert optimizer.results[0]["model_name"] == "baseline_1"
     assert optimizer.results[1]["model_name"] == "baseline_2"
     assert "n_topics" in optimizer.results[0]
+
+
+def test_tritopic_grid_keeps_realized_topic_count(monkeypatch):
+    """A grid parameter named like a metric must not overwrite the metric.
+
+    TriTopic requests topics through `params.n_topics`, which shares its name
+    with the realized topic count reported by training.
+    """
+    import src.models as models
+    import src.run_provenance as run_provenance
+    import src.training as training
+    import src.utils as utils
+    from src.optimizer import Optimizer
+
+    monkeypatch.setattr(
+        models, "create_topic_model_instance", lambda **kwargs: object()
+    )
+    monkeypatch.setattr(
+        training,
+        "train_and_evaluate",
+        lambda **kwargs: (
+            {"model_name": kwargs["model_id"], "n_topics": 7, "outliers": 0},
+            object(),
+        ),
+    )
+    monkeypatch.setattr(run_provenance, "collect_run_provenance", lambda **kwargs: {})
+    monkeypatch.setattr(utils, "extract_qualitative_data", lambda *args: None)
+
+    optimizer = Optimizer(
+        texts=["a", "b"],
+        embeddings=None,
+        scaled_metadata=None,
+        model_config={
+            "id": "tritopic",
+            "type": "tritopic",
+            "params": {"n_topics": [10, 20]},
+        },
+        experiment_config={
+            "experiment": {"dataset_path": "data/toy_embeddings.parquet"}
+        },
+        experiment_id="test_tritopic",
+        random_state=[1],
+        file_timestamp="20261001-000000",
+    )
+    optimizer.run()
+
+    assert [row["requested_topics"] for row in optimizer.results] == [10, 20]
+    assert [row["n_topics"] for row in optimizer.results] == [7, 7]
+
+
+def test_requested_topic_setting_per_model_family():
+    from src.document_assignments import requested_topic_setting
+
+    assert requested_topic_setting({"bertopic": {"params": {"nr_topics": 30}}}) == 30
+    assert requested_topic_setting({"clustering": {"params": {"n_clusters": 20}}}) == 20
+    assert requested_topic_setting({"params": {"n_topics": 40}}) == 40
+    assert requested_topic_setting({"id": "stm"}) is None
