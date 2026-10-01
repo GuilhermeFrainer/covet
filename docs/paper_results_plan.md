@@ -85,14 +85,25 @@ These are dataset-level paired deltas: each variant minus its reference, matched
     - The large ANES coherence "gains" of MV-HDBSCAN and Feature-Stacking are likely an artifact of this padding.
     - The padding was added in April (`36d7bbf`) because OCTIS refuses to score when the *first* topic has fewer than `topk` words. The new code calls gensim directly, so it no longer needs it.
     - Reviewers: xxbv listed the padding as a weakness ("artificially modifies topic representations"); Yiq2 praised the paper for disclosing it. → Disclose the change and its effect in the paper.
-- [ ] **TODO: recompute topic metrics for existing runs** (no retraining; dry run on 2026-10-01 matched 1,264 of 1,295 runs. The 31 unmatched are Sept 17–18 Trump runs superseded by Sept 29 reruns, plus the stale FastTriTopic run).
+- [ ] **TODO: recompute topic metrics for existing runs** (no retraining). The scores are updated **in place in the merged result CSVs**, so the dashboard, `get_results.ps1` and `make_paper_outputs.py` pick them up with no further wiring (decided 2026-10-01).
   ```bash
+  # 1. Merge first: the script refuses to run while unmerged raw CSVs exist (Trump has ~100).
+  uv run python scripts/analysis/merge_results.py
+  # 2. Optional rehearsal: every computation and safeguard, nothing written.
+  uv run python scripts/analysis/recompute_topic_metrics.py --dry-run
+  # 3. The real run (or --datasets anes fed gadarian yelp first; Trump is the slowest).
   uv run python scripts/analysis/recompute_topic_metrics.py
   ```
-  - Writes `results/derived/topic_metrics_recomputed.csv`: one row per run with `c_npmi`, `c_v`, `u_mass`, `irbo`, `topic_diversity`, `n_topics_short`, `n_topics_unscored`, `n_keywords_oov` and `evaluation_protocol`. The original CSVs are not modified.
-  - Expected runtime: minutes for most datasets; Trump (55k documents) is the slowest. `--datasets anes fed` limits the run.
-  - New runs already use the new protocol (`evaluation_protocol = unpadded_2026_10`). Rows without that column were scored the old way: never pool the two.
-  - [ ] After running it: make the analysis and dashboard read the recomputed metrics instead of the stored ones (join on `dataset_name`, `model_name`, `file_timestamp`).
+  - Updates `c_npmi`, `c_v`, `u_mass`, `irbo` and `topic_diversity`. It keeps the previous values as `<metric>_padded`, and adds `n_topics_short`, `n_topics_unscored`, `n_keywords_oov` and `evaluation_protocol` (`unpadded_2026_10`). Rows already at that protocol are skipped, so re-running is safe.
+  - Safeguards. A file is left untouched unless all of these pass:
+    - unique run keys;
+    - BERTopic topic counts match the stored `n_topics`;
+    - wherever no topic needed padding, the previous protocol reproduces the stored NPMI exactly, which proves each row is matched to its own topic words.
+    The original file is zipped into `results/archive/*_pre_recompute_*.zip` (verified byte for byte), and the new file is written, re-read and validated before it replaces the original.
+  - Checked on 2026-10-01 on real data, with nothing written:
+    - Gadarian dry run: 360 rows; 275 verified exactly, 85 unverifiable (they had padded topics), 0 failures.
+    - Full write test on a copy of Gadarian: only the metric columns changed. The archive equals the original. TriTopic rows without short topics are unchanged (within 1e-16), and IRBO is unchanged for unpadded rows. No topic words are missing from the evaluation vocabulary any more.
+  - Runs whose topic words weren't saved stay at the old protocol (`evaluation_protocol` empty), and the paper outputs stay "Preliminary" while any exist.
   - [ ] After running it: re-check the ANES conclusions (MV-HDBSCAN / Feature-Stacking gains, NaiveFusion's coherence wins).
   - [ ] Paper: describe the evaluation (no padding; topics with fewer than two distinct words excluded from coherence; Topic Diversity keeps the K × 10 denominator), report `n_topics_short` / `n_topics_unscored` per model and dataset, and make NPMI and C_V the primary coherence metrics, with UMass secondary (Yiq2: UMass correlates worst with human judgment).
 - [ ] **TriTopic realized topic count is not recorded.**
@@ -201,7 +212,7 @@ Both sanity checks were finished on 2026-10-01. **The RQ1 dashboard work below w
     - `dose_response.{pdf,png}`: weighted Append, Δ NPMI / Diversity / noise share / AMI against w
     - Marked "Preliminary" automatically until every standard row has `evaluation_protocol = unpadded_2026_10`. Tested; the tables compile with pdflatex.
   - [ ] After the meeting: the descriptive benchmark table with TriTopic (average ranks).
-  - [ ] 8:45–9:15: make the dashboard and comparisons read `results/derived/topic_metrics_recomputed.csv` when present (only if the user ran the recompute).
+  - [x] ~~Wire a recomputed-metrics sidecar into the dashboard and comparisons~~: no longer needed. The recompute now updates the merged CSVs in place, so every consumer reads the corrected values (2026-10-01).
   - [ ] 9:15–10:00: review the dashboard and the outputs together.
 - Deferred to the weekend (user): run the recompute, merge the Trump raw files, optional runs (weighted Append on Fed/Trump, Trump TriTopic), paper writing.
 

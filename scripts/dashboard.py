@@ -100,7 +100,15 @@ METRIC_CONFIG = {
 
 # Shown alongside the metrics but never highlighted as "best": models that take
 # covariates as input can raise topic–metadata alignment by construction.
-DESCRIPTIVE_METRICS = {"meta_ami_mean"}
+DESCRIPTIVE_METRICS = {
+    "meta_ami_mean",
+    # Evaluation diagnostics; missing for runs scored before they existed.
+    "n_topics_short",
+    "n_topics_unscored",
+    "n_keywords_oov",
+}
+# Pre-recompute scores kept by recompute_topic_metrics.py, not current metrics.
+PREVIOUS_SCORE_SUFFIX = "_padded"
 
 ASSIGNMENTS_DIR = PROJECT_ROOT / "output" / "document_assignments"
 ALIGNMENT_BACKFILL = (
@@ -1326,6 +1334,7 @@ def main():
             for col, dtype in zip(filtered_df.columns, filtered_df.dtypes)
             if dtype in [pl.Float32, pl.Float64, pl.Int32, pl.Int64]
             and col not in metadata_cols
+            and not col.endswith(PREVIOUS_SCORE_SUFFIX)
         ]
 
         # Metrics overview
