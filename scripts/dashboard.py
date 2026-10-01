@@ -50,6 +50,7 @@ from src.make_table import (
     style_demsar_delta_dataframe,
     style_demsar_pairwise_matrix,
 )
+from src.metadata_alignment import fill_run_alignment, load_covariate_alignment
 from src.model_catalog import (
     annotate_coverage,
     annotate_models,
@@ -93,6 +94,21 @@ METRIC_CONFIG = {
     "n_topics": "max",
     "n_observations": "max",
 }
+
+# Shown alongside the metrics but never highlighted as "best": models that take
+# covariates as input can raise topic–metadata alignment by construction.
+DESCRIPTIVE_METRICS = {"meta_ami_mean"}
+
+ASSIGNMENTS_DIR = PROJECT_ROOT / "output" / "document_assignments"
+ALIGNMENT_BACKFILL = (
+    PROJECT_ROOT / "results" / "derived" / "metadata_alignment_backfill.csv"
+)
+
+
+@st.cache_data
+def load_alignment() -> pl.DataFrame:
+    """Per-covariate topic–metadata AMI from run manifests and the backfill."""
+    return load_covariate_alignment(ASSIGNMENTS_DIR, ALIGNMENT_BACKFILL)
 
 
 @st.cache_data
@@ -443,6 +459,121 @@ def get_cached_noise_coverage(
     )
 
 
+def render_alignment_section(filtered_df: pl.DataFrame, alignment: pl.DataFrame):
+    """Renders per-model topic–metadata AMI for one dataset and condition."""
+    if not {"meta_ami_mean", "run_uid"} <= set(filtered_df.columns):
+        st.info("No topic–metadata alignment values in the selected results.")
+        return
+    runs = filtered_df.filter(
+        pl.col("run_uid").is_not_null() & pl.col("meta_ami_mean").is_not_null()
+    ).unique(subset="run_uid", keep="first")
+    if runs.is_empty():
+        st.info("No topic–metadata alignment values in the selected results.")
+        return
+
+    col_ds, col_cond = st.columns(2)
+    with col_ds:
+        datasets = sorted(runs["dataset_label"].unique().to_list())
+        dataset = st.selectbox("Dataset:", datasets, key="ami_dataset")
+    with col_cond:
+        in_dataset = runs.filter(pl.col("dataset_label") == dataset)
+        conditions = sorted(in_dataset["condition"].unique().to_list())
+        condition = st.selectbox(
+            "Condition:", conditions,
+            index=conditions.index("remove_rep_stopwords")
+            if "remove_rep_stopwords" in conditions else 0,
+            key="ami_condition",
+        )
+    runs = runs.filter(
+        (pl.col("dataset_label") == dataset) & (pl.col("condition") == condition)
+    ).select("run_uid", "model_type", pl.col("meta_ami_mean").cast(pl.Float64))
+    model_order = (
+        runs.group_by("model_type").agg(pl.col("meta_ami_mean").mean())
+        .sort("meta_ami_mean", descending=True)["model_type"].to_list()
+    )
+
+    by_covariate = runs.join(
+        alignment.select("run_uid", "covariate", "ami", "ami_source"), on="run_uid"
+    )
+    cells = by_covariate.group_by("model_type", "covariate").agg(
+        pl.col("ami").mean().alias("AMI"), pl.len().alias("Runs")
+    )
+    means = runs.group_by("model_type").agg(
+        pl.lit("(mean)").alias("covariate"),
+        pl.col("meta_ami_mean").mean().alias("AMI"),
+        pl.len().cast(pl.UInt32).alias("Runs"),
+    )
+    covariates = sorted(cells["covariate"].unique().to_list()) + ["(mean)"]
+    heat = pl.concat([cells, means], how="vertical_relaxed").to_dicts()
+    height = max(200, 28 * len(model_order))
+
+    st.subheader("Mean AMI by covariate")
+    base = alt.Chart(alt.Data(values=heat)).encode(
+        x=alt.X(
+            "covariate:N", sort=covariates, title=None,
+            axis=alt.Axis(labelAngle=-30),
+        ),
+        y=alt.Y("model_type:N", sort=model_order, title=None),
+    )
+    rects = base.mark_rect().encode(
+        color=alt.Color(
+            "AMI:Q", scale=alt.Scale(scheme="blues", domainMin=0, clamp=True),
+            legend=alt.Legend(title="AMI"),
+        ),
+        tooltip=[
+            "model_type:N", "covariate:N", alt.Tooltip("AMI:Q", format=".4f"), "Runs:Q",
+        ],
+    )
+    labels = base.mark_text(fontSize=11).encode(
+        text=alt.Text("AMI:Q", format=".3f"),
+        color=alt.value("#222222"),
+    )
+    st.altair_chart((rects + labels).properties(height=height), width="stretch")
+    st.caption(
+        "Cells average over seeds and requested topic counts. The (mean) column "
+        "is meta_ami_mean, the run-level average over covariates."
+    )
+
+    st.subheader("Run-level meta_ami_mean")
+    run_points = alt.Chart(runs).mark_circle(size=60, opacity=0.5).encode(
+        x=alt.X("meta_ami_mean:Q", title="meta_ami_mean"),
+        y=alt.Y("model_type:N", sort=model_order, title=None),
+        color=alt.Color(
+            "model_type:N", legend=None, scale=alt.Scale(scheme="tableau10")
+        ),
+        tooltip=[
+            "model_type:N", alt.Tooltip("meta_ami_mean:Q", format=".4f"), "run_uid:N",
+        ],
+    )
+    mean_marks = alt.Chart(means.to_pandas()).mark_point(
+        shape="diamond", filled=True, color="#111111", size=140
+    ).encode(
+        x="AMI:Q",
+        y=alt.Y("model_type:N", sort=model_order),
+        tooltip=["model_type:N", alt.Tooltip("AMI:Q", format=".4f", title="Mean")],
+    )
+    st.altair_chart(
+        (run_points + mean_marks).properties(height=height), width="stretch"
+    )
+    st.caption("Each dot is one run; the black diamond is the model mean.")
+
+    summary = (
+        runs.group_by("model_type").agg(
+            pl.len().alias("Runs"),
+            pl.col("meta_ami_mean").mean().alias("Mean AMI"),
+            pl.col("meta_ami_mean").std().alias("SD"),
+        )
+        .join(
+            by_covariate.unique("run_uid").group_by("model_type").agg(
+                (pl.col("ami_source") == "backfill").sum().alias("Backfilled runs")
+            ),
+            on="model_type", how="left",
+        )
+        .sort("Mean AMI", descending=True)
+    )
+    st.dataframe(summary, hide_index=True, width="stretch")
+
+
 def main():
     """Main function to run the Streamlit dashboard."""
     st.set_page_config(
@@ -458,6 +589,9 @@ def main():
     output_dir = "output"
     df = load_all_results(results_dir)
     qual_df = load_all_results(output_dir)
+    alignment = load_alignment()
+    if not df.is_empty():
+        df = fill_run_alignment(df, alignment)
 
     if df.is_empty():
         st.warning(f"No result files found in `{results_dir}/`.")
@@ -744,7 +878,7 @@ def main():
             standard_condition = "remove_rep_stopwords"
             plot_rows = edge_datasets.filter(
                 (pl.col("Condition") == standard_condition)
-                & pl.col("Metric").is_in(["c_npmi", "irbo"])
+                & pl.col("Metric").is_in(["c_npmi", "irbo", "meta_ami_mean"])
                 & pl.col("Improvement delta").is_not_null()
             )
             summary_by_edge_metric = {
@@ -754,7 +888,7 @@ def main():
             edge_order = [edge["id"] for edge in main_edges]
             plot_row_names = {}
             for edge in main_edges:
-                for metric in ("c_npmi", "irbo"):
+                for metric in ("c_npmi", "irbo", "meta_ami_mean"):
                     result = summary_by_edge_metric.get((edge["id"], metric), {})
                     n = result.get("Datasets", 0) or 0
                     wins, ties, losses = (
@@ -776,7 +910,7 @@ def main():
             dataset_colors = ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00"]
             dataset_shapes = ["circle", "square", "triangle-up", "diamond", "cross"]
 
-            def delta_panel(metric, title):
+            def delta_panel(metric, title, x_title=None):
                 rows = plot_rows.filter(pl.col("Metric") == metric).to_dicts()
                 if not rows:
                     return None
@@ -803,7 +937,7 @@ def main():
                 )
                 x = alt.X(
                     "Improvement delta:Q",
-                    title=f"Improvement-oriented Δ {metric}",
+                    title=x_title or f"Improvement-oriented Δ {metric}",
                     scale=alt.Scale(domain=[-limit, limit]),
                 )
                 base = alt.Chart(alt.Data(values=rows))
@@ -851,6 +985,17 @@ def main():
                 chart = delta_panel("irbo", "B · IRBO")
                 if chart is not None:
                     st.altair_chart(chart, width="stretch")
+            chart = delta_panel(
+                "meta_ami_mean", "C · Topic–metadata AMI",
+                x_title="Δ meta_ami_mean (variant − reference)",
+            )
+            if chart is not None:
+                st.altair_chart(chart, width="stretch")
+                st.caption(
+                    "Panel C is a mechanism check, not a quality score: a positive "
+                    "delta means the variant's topics follow the raw covariates more "
+                    "closely. W/T/L counts increases/ties/decreases."
+                )
             st.caption(
                 "No confidence intervals are shown. Datasets are the independent units; "
                 "seed and requested-count runs are repeated conditions. A row's dataset "
@@ -870,6 +1015,7 @@ def main():
                 "topic_diversity": "Topic diversity",
                 "duration_seconds": "Duration (s)",
                 "outliers": "Outliers",
+                "meta_ami_mean": "Metadata AMI",
             }
             for edge in main_edges:
                 row = {
@@ -1005,7 +1151,8 @@ def main():
 
         # Check for NaN / None metrics in filtered_df
         nan_info = []
-        for col in numeric_cols:
+        # Missing AMI marks runs without exported assignments, not a failed metric.
+        for col in [c for c in numeric_cols if c not in DESCRIPTIVE_METRICS]:
             null_c = filtered_df[col].null_count()
             nan_c = (
                 filtered_df.filter(pl.col(col).is_nan()).shape[0]
@@ -1055,6 +1202,7 @@ def main():
                     "irbo",
                     "topic_diversity",
                     "outliers",
+                    "meta_ami_mean",
                     "duration_seconds",
                 ]
                 if m in filtered_df.columns
@@ -1118,7 +1266,7 @@ def main():
 
             def highlight_agg_metrics(col_series):
                 c_name = col_series.name
-                if c_name not in eval_metrics:
+                if c_name not in eval_metrics or c_name in DESCRIPTIVE_METRICS:
                     return [""] * len(col_series)
 
                 styles = []
@@ -1149,7 +1297,9 @@ def main():
             st.dataframe(styled_agg, width="stretch", hide_index=True)
             st.caption(
                 "Aggregated across seeds and topic counts (Mean ± SD). "
-                ":green-background[**Green**: Best performing model type per dataset]."
+                ":green-background[**Green**: Best performing model type per dataset]. "
+                "`meta_ami_mean` (topic–metadata AMI) is descriptive and never "
+                "highlighted."
             )
 
             col_e1, col_e2 = st.columns(2)
@@ -1184,7 +1334,9 @@ def main():
             def highlight_metrics(s):
                 styles = [""] * len(s)
                 is_metric = s.name in METRIC_CONFIG
-                is_numeric = s.name in numeric_cols
+                is_numeric = (
+                    s.name in numeric_cols and s.name not in DESCRIPTIVE_METRICS
+                )
 
                 if is_metric or is_numeric:
                     numeric_s = pd.to_numeric(s, errors="coerce")
@@ -1283,6 +1435,19 @@ def main():
                 .properties(height=500)
             )
             st.altair_chart(chart, width="stretch")
+
+        # 5. Topic–metadata alignment
+        st.divider()
+        st.header("🧭 Topic–Metadata Alignment")
+        st.caption(
+            "Adjusted mutual information between each document's final topic and "
+            "each raw covariate (≈0 unrelated, 1 identical). Descriptive, not a "
+            "quality score: models that take covariates as input can raise it by "
+            "construction. HDBSCAN noise (topic −1) counts as its own topic. "
+            "Older runs are filled from "
+            "`results/derived/metadata_alignment_backfill.csv`."
+        )
+        render_alignment_section(filtered_df, alignment)
 
     with tab_qualitative:
         st.header("🔍 Qualitative Topic Analysis")

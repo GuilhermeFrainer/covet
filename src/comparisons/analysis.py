@@ -13,11 +13,16 @@ SEEDS = (36201624, 62613654, 57116123)
 REQUESTED_TOPICS = (10, 20, 30, 40, 50)
 BENCHMARK_DATASETS = ("anes", "fed", "gadarian", "trump", "yelp")
 QUALITY_METRICS = ("c_v", "c_npmi", "u_mass", "irbo", "topic_diversity")
-INFERENTIAL_METRICS = (*QUALITY_METRICS, "duration_seconds", "outliers")
+# Topic–metadata AMI is tested as a change (variant minus reference), not as an
+# improvement: models using covariates as input can raise it by construction.
+INFERENTIAL_METRICS = (
+    *QUALITY_METRICS, "duration_seconds", "outliers", "meta_ami_mean"
+)
 METRIC_DIRECTIONS = {
     **{name: "maximize" for name in QUALITY_METRICS},
     "duration_seconds": "minimize",
     "outliers": "minimize",
+    "meta_ami_mean": "outcome",
     "n_topics": "outcome",
 }
 RQ1_EDGE_REGISTRY = Path(__file__).resolve().parents[2] / "config" / "rq1_presentation_edges.yaml"
@@ -193,7 +198,7 @@ def compute_ablation_comparisons(df: pl.DataFrame, catalog: dict, summary_model_
             pair_dataset_deltas = {metric: [] for metric in INFERENTIAL_METRICS}
             for dataset in datasets:
                 expected = {(seed, count) for seed in SEEDS for count in REQUESTED_TOPICS}
-                metric_diffs = {metric: [] for metric in (*QUALITY_METRICS, "duration_seconds", "outliers", "n_topics")}
+                metric_diffs = {metric: [] for metric in (*INFERENTIAL_METRICS, "n_topics")}
                 baseline_scores = {metric: [] for metric in metric_diffs}
                 variant_scores = {metric: [] for metric in metric_diffs}
                 matched = 0

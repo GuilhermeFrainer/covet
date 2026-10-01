@@ -222,6 +222,7 @@ The dashboard enables:
 *   Filtering by dataset, model type, date, and preprocessing regime (`standard`, `stemmed`, `no_stopword_removal`).
 *   Direct comparison across coherence (`c_v`, `u_mass`), diversity (`irbo`), and outlier metrics.
 *   Interactive scatter plots and automated highlighting of best models.
+*   Topic–metadata alignment (`meta_ami_mean`): per-covariate AMI heatmaps, run-level distributions, and variant-minus-reference deltas in the RQ1 ablation view. AMI is descriptive and never highlighted as "best"; older runs are filled from the backfill under `results/derived/`.
 
 ---
 

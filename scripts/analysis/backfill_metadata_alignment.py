@@ -6,7 +6,8 @@ located by the SHA-256 recorded in its manifest (not by path, which is often
 a cluster scratch path), and the assignments file is verified against its
 recorded checksum. Existing artifacts are never modified: the results go to a
 long-format sidecar CSV keyed by ``run_uid``, under ``results/derived/`` so the
-dashboard and merge_results.py (which scan only the top level) ignore it.
+results loaders and merge_results.py (which scan only the top level) do not
+mistake it for run results. The dashboard joins it by ``run_uid`` explicitly.
 
 Usage:
     uv run python scripts/analysis/backfill_metadata_alignment.py
