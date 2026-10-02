@@ -625,7 +625,7 @@ def render_rq1_cross_dataset(
     )
     st.subheader(f"Dataset-level Δ {metric_label}")
     st.markdown(
-        f"Each dot is one dataset ({scope}); the black diamond is the median "
+        f"Each dot is one dataset ({scope}); the white diamond is the median "
         "dataset delta. Dataset colors and marker shapes match the heatmap legend."
     )
     if rows:
@@ -672,8 +672,15 @@ def render_rq1_cross_dataset(
                 alt.Tooltip("Coverage:N"),
             ],
         )
+        # White fill with a dark outline stays visible in light and dark themes.
         median = alt.Chart(alt.Data(values=medians)).mark_point(
-            shape="diamond", color="#111111", size=170
+            shape="diamond",
+            filled=True,
+            fill="#FFFFFF",
+            stroke="#111111",
+            strokeWidth=1.5,
+            opacity=1,
+            size=170,
         ).encode(
             x=alt.X("Median Δ:Q", scale=x_scale),
             y=alt.Y("Plot row:N", sort=ordered_labels),
@@ -808,11 +815,6 @@ def render_rq1_heatmap(edges, catalog, edge_runs, metric, dataset, topic_slice):
     if cells.is_empty():
         st.info("No matched runs to map.")
         return
-    cell_order = [
-        f"{name} · k={count}"
-        for name in BENCHMARK_DATASETS
-        for count in REQUESTED_TOPICS
-    ]
     comparison_order = comparison_views.edge_names(edges, catalog)[
         "Comparison"
     ].to_list()
@@ -827,18 +829,20 @@ def render_rq1_heatmap(edges, catalog, edge_runs, metric, dataset, topic_slice):
         ).alias("Selected")
     )
     limit = max(cells["Mean Δ"].abs().max() or 0.0, 1e-6)
-    base = alt.Chart(alt.Data(values=cells.to_dicts())).encode(
+    # One panel per dataset: a readable dataset header and horizontal topic
+    # counts instead of 25 rotated "dataset · k" labels.
+    base = alt.Chart().encode(
         x=alt.X(
-            "Cell:N",
-            sort=cell_order,
-            title=None,
-            axis=alt.Axis(labelAngle=-60, labelFontSize=10),
+            "Requested topics:O",
+            sort=list(REQUESTED_TOPICS),
+            title="Requested topics",
+            axis=alt.Axis(labelAngle=0, labelFontSize=11),
         ),
         y=alt.Y(
             "Comparison:N",
             sort=comparison_order,
             title=None,
-            axis=alt.Axis(labelLimit=400),
+            axis=alt.Axis(labelLimit=400, labelFontSize=11),
         ),
     )
     rects = base.mark_rect().encode(
@@ -859,16 +863,28 @@ def render_rq1_heatmap(edges, catalog, edge_runs, metric, dataset, topic_slice):
             "Seeds:Q",
         ],
     )
-    layers = rects
+    layers = [rects]
     if dataset or topic_slice:
-        outline = base.transform_filter("datum.Selected").mark_rect(
-            fill=None, stroke="#111111", strokeWidth=2
+        # Yellow stays visible on red, blue and both page themes.
+        layers.append(
+            base.transform_filter("datum.Selected").mark_rect(
+                fill=None, stroke="#FFD400", strokeWidth=2.5
+            )
         )
-        layers = rects + outline
-    st.altair_chart(
-        layers.properties(height=max(220, 44 * len(comparison_order))),
-        width="stretch",
+    chart = (
+        alt.layer(*layers, data=alt.Data(values=cells.to_dicts()))
+        .properties(width=200, height=max(220, 40 * len(comparison_order)))
+        .facet(
+            column=alt.Column(
+                "Dataset:N",
+                sort=list(BENCHMARK_DATASETS),
+                title=None,
+                header=alt.Header(labelFontSize=13, labelFontWeight="bold"),
+            ),
+            spacing=8,
+        )
     )
+    st.altair_chart(chart)
     st.caption(
         "Blue favors the proposed model, red the reference (for Metadata AMI: blue "
         "means the proposed model's topics follow the metadata more closely). Each "
