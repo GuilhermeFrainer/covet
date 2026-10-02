@@ -233,6 +233,7 @@ def ablation_table_latex(
     metrics=TABLE_METRICS,
     preliminary: bool = False,
     label: str = "tab:hdbscan_ablation",
+    note: str = "",
 ) -> str:
     """Booktabs `table*`: mean Δ with W/T/L per metric, then topics and noise."""
     header = " & ".join(
@@ -261,6 +262,8 @@ def ablation_table_latex(
         r"documents assigned to the noise cluster, in percentage points) are "
         r"proposed minus reference. $n$: datasets with complete runs."
     )
+    if note:
+        caption += " " + _latex_escape(note)
     if preliminary:
         caption += r" \textbf{Preliminary.}"
     columns = "l" + "c" * (len(metrics) + 3)
@@ -290,6 +293,7 @@ def ablation_stats_latex(
     metrics=TABLE_METRICS,
     preliminary: bool = False,
     label: str = "tab:hdbscan_ablation_stats",
+    note: str = "",
 ) -> str:
     """Rank-biserial r and Holm-adjusted exact p for each variant and metric."""
     header = " & ".join(
@@ -321,6 +325,8 @@ def ablation_stats_latex(
         + floor
         + r" summarize cross-dataset consistency rather than confirm effects."
     )
+    if note:
+        caption += " " + _latex_escape(note)
     if preliminary:
         caption += r" \textbf{Preliminary.}"
     lines = [

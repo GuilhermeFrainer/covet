@@ -24,6 +24,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src import paper_outputs  # noqa: E402
+from src.comparisons.analysis import TRUMP_VARIANTS, use_trump_variant  # noqa: E402
 from src.model_catalog import load_catalog  # noqa: E402
 
 DEFAULT_OUTPUT = PROJECT_ROOT / "tables" / "paper"
@@ -41,13 +42,28 @@ def main():
         help="y-axis metric of the trade-off figure",
     )
     parser.add_argument("--formats", nargs="+", default=["pdf", "png"])
+    parser.add_argument(
+        "--trump",
+        choices=list(TRUMP_VARIANTS),
+        default="trump",
+        help="Trump corpus counted as the fifth dataset (default: full Trump). "
+        "Non-default choices write to a subfolder of --output-dir.",
+    )
     args = parser.parse_args()
 
     catalog = load_catalog()
-    results = paper_outputs.load_results(PROJECT_ROOT)
+    results = use_trump_variant(paper_outputs.load_results(PROJECT_ROOT), args.trump)
     preliminary = paper_outputs.is_preliminary(results)
     documents = paper_outputs.documents_per_dataset(results)
-    tables_dir, figures_dir = args.output_dir / "tables", args.output_dir / "figures"
+    output_dir = (
+        args.output_dir if args.trump == "trump" else args.output_dir / args.trump
+    )
+    tables_dir, figures_dir = output_dir / "tables", output_dir / "figures"
+    note = (
+        ""
+        if args.trump == "trump"
+        else f"Trump results use the {TRUMP_VARIANTS[args.trump]}."
+    )
 
     datasets, summary = paper_outputs.compare(
         results, catalog, paper_outputs.HDBSCAN_VARIANTS
@@ -58,11 +74,15 @@ def main():
     written = [
         paper_outputs.write_text(
             tables_dir / "hdbscan_ablation.tex",
-            paper_outputs.ablation_table_latex(table, catalog, preliminary=preliminary),
+            paper_outputs.ablation_table_latex(
+                table, catalog, preliminary=preliminary, note=note
+            ),
         ),
         paper_outputs.write_text(
             tables_dir / "hdbscan_ablation_stats.tex",
-            paper_outputs.ablation_stats_latex(table, preliminary=preliminary),
+            paper_outputs.ablation_stats_latex(
+                table, preliminary=preliminary, note=note
+            ),
         ),
     ]
     tables_dir.mkdir(parents=True, exist_ok=True)

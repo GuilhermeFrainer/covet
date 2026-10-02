@@ -134,3 +134,19 @@ def test_heatmap_has_one_cell_per_dataset_and_topic_count(full_grid):
     assert set(cells["Seeds"].to_list()) == {len(SEEDS)}
     assert "fed · k=40" in cells["Cell"].to_list()
     assert cells["Comparison"].unique().to_list() == ["Base → Variant"]
+
+
+def test_use_trump_variant_counts_exactly_one_trump():
+    from src.comparisons.analysis import use_trump_variant
+
+    rows = pl.DataFrame(
+        {"dataset_label": ["fed", "trump", "trump_s25000"], "value": [1, 2, 3]}
+    )
+    full = use_trump_variant(rows, "trump")
+    assert full["dataset_label"].to_list() == ["fed", "trump"]
+    assert full["value"].to_list() == [1, 2]
+    sample = use_trump_variant(rows, "trump_s25000")
+    assert sample["dataset_label"].to_list() == ["fed", "trump"]
+    assert sample["value"].to_list() == [1, 3]
+    with pytest.raises(ValueError):
+        use_trump_variant(rows, "trump_s10")

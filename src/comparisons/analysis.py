@@ -26,6 +26,27 @@ METRIC_DIRECTIONS = {
     "n_topics": "outcome",
 }
 RQ1_EDGE_REGISTRY = Path(__file__).resolve().parents[2] / "config" / "rq1_presentation_edges.yaml"
+# Corpora that can stand in for the benchmark's Trump dataset. They are the
+# same corpus, so exactly one may count in a cross-dataset comparison.
+TRUMP_VARIANTS = {"trump": "Full Trump", "trump_s25000": "Trump 25k sample"}
+
+
+def use_trump_variant(df: pl.DataFrame, variant: str = "trump") -> pl.DataFrame:
+    """Makes `variant` the benchmark's Trump dataset and drops the others.
+
+    Rows of `variant` are relabelled `trump` in `dataset_label`, so every
+    comparison treats them as the fifth benchmark dataset; rows of the other
+    Trump variants are removed.
+    """
+    if variant not in TRUMP_VARIANTS:
+        raise ValueError(f"Unknown Trump variant: {variant}")
+    others = [name for name in TRUMP_VARIANTS if name != variant]
+    return df.filter(~pl.col("dataset_label").is_in(others)).with_columns(
+        pl.when(pl.col("dataset_label") == variant)
+        .then(pl.lit("trump"))
+        .otherwise(pl.col("dataset_label"))
+        .alias("dataset_label")
+    )
 
 
 def load_rq1_edges(path=RQ1_EDGE_REGISTRY):

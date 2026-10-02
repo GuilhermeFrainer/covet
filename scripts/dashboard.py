@@ -65,9 +65,11 @@ from src.comparisons.analysis import (
     BENCHMARK_DATASETS,
     INFERENTIAL_METRICS,
     REQUESTED_TOPICS,
+    TRUMP_VARIANTS,
     compute_ablation_comparisons,
     compute_registered_edge_comparisons,
     load_rq1_edges,
+    use_trump_variant,
 )
 from src.results_analysis import (
     calculate_hdbscan_noise_coverage,
@@ -1171,7 +1173,17 @@ def main():
         main_edges = [edge for edge in rq1_edges if edge["main_figure"]]
 
         all_datasets_label, all_topics_label = "All datasets", "All topic counts"
-        scope_metric, scope_dataset, scope_topics = st.columns(3)
+        scope_metric, scope_dataset, scope_topics, scope_trump = st.columns(4)
+        with scope_trump:
+            trump_variant = st.selectbox(
+                "Trump:",
+                list(TRUMP_VARIANTS),
+                format_func=TRUMP_VARIANTS.get,
+                key="rq1_trump",
+                help="Which Trump corpus counts as the fifth dataset. Only one "
+                "may count, since both are the same corpus.",
+            )
+        rq1_results = use_trump_variant(all_results, trump_variant)
         with scope_metric:
             rq1_metric = st.selectbox(
                 "Metric:",
@@ -1197,13 +1209,13 @@ def main():
 
         empty = (pl.DataFrame(), pl.DataFrame(), pl.DataFrame())
         full_grid = (
-            compute_registered_edge_comparisons(all_results, catalog, main_edges)
+            compute_registered_edge_comparisons(rq1_results, catalog, main_edges)
             if main_edges
             else empty
         )
         scoped = (
             compute_registered_edge_comparisons(
-                all_results, catalog, main_edges, requested_topics=topic_slice
+                rq1_results, catalog, main_edges, requested_topics=topic_slice
             )
             if main_edges and topic_slice
             else full_grid

@@ -162,3 +162,16 @@ def test_load_results_annotates_condition_and_dataset(tmp_path):
     assert row["dataset_label"] == "fed"
     assert row["condition"] == "remove_rep_stopwords"
     assert row["catalog_id"] == "baseline"
+
+
+def test_caption_note_names_the_trump_variant(comparison):
+    datasets, summary = comparison
+    table = paper_outputs.ablation_table(
+        datasets, summary, CATALOG, variants=("append_umap",), metrics=("c_npmi",)
+    )
+    note = "Trump results use the Trump 25k sample."
+    main = paper_outputs.ablation_table_latex(
+        table, CATALOG, metrics=("c_npmi",), note=note
+    )
+    stats = paper_outputs.ablation_stats_latex(table, metrics=("c_npmi",), note=note)
+    assert note in main and note in stats
