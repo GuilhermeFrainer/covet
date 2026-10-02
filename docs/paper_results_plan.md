@@ -85,7 +85,22 @@ These are dataset-level paired deltas: each variant minus its reference, matched
     - The large ANES coherence "gains" of MV-HDBSCAN and Feature-Stacking are likely an artifact of this padding.
     - The padding was added in April (`36d7bbf`) because OCTIS refuses to score when the *first* topic has fewer than `topk` words. The new code calls gensim directly, so it no longer needs it.
     - Reviewers: xxbv listed the padding as a weakness ("artificially modifies topic representations"); Yiq2 praised the paper for disclosing it. → Disclose the change and its effect in the paper.
-- [ ] **TODO: recompute topic metrics for existing runs** (no retraining). The scores are updated **in place in the merged result CSVs**, so the dashboard, `get_results.ps1` and `make_paper_outputs.py` pick them up with no further wiring (decided 2026-10-01).
+- [x] **Recompute done, 2026-10-01 18:56–21:01** (commit `5778e91`; log `D:\CA-BERTopic_backups\recompute_20261001_185640.log`).
+  - Before the run: a full verified backup in `D:\CA-BERTopic_backups\results_output_before_recompute_20261001_185257.zip`, and Trump merged with `--allow-partial` (111 raw files archived in `results/archive/trump_standard_merged_20261001_185602.zip`; 92 runs, latest reruns kept).
+  - Every dataset updated with no safeguard failures:
+
+    | Dataset | Runs updated | Verified exactly | Unverifiable (padded) |
+    |---|---|---|---|
+    | Gadarian | 360/360 | 275 | 85 |
+    | ANES | 315/315 | 62 | 253 |
+    | Fed | 225/225 | 225 | 0 |
+    | Yelp | 270/270 | 270 | 0 |
+    | Trump | 92/92 | 75 | 17 |
+
+  - Independent check against the archives (and, for the four files that existed then, the backup): rows unchanged, only score columns changed, `*_padded` exact, 100% at the new protocol, no NaN coherence left.
+  - Effect on the HDBSCAN table (NPMI Δ, before → after): Feature-Stacking +0.046 → +0.004; MV-HDBSCAN +0.032 → −0.029 (0/0/4); Append −0.031 → −0.021; Aligned +0.007 → +0.004. The large ANES gains were the padding artifact. The paper outputs were regenerated and are no longer preliminary. Trump is now included (n = 5).
+  - [ ] Still open: the dashboard's "Metric Errors Detected" banner flags configuration columns that are legitimately empty (`nr_topics`, `n_clusters`, UMAP settings). This predates the recompute; restrict its check to score columns.
+- [x] **Recompute topic metrics for existing runs** (reference; done above). The scores are updated **in place in the merged result CSVs**, so the dashboard, `get_results.ps1` and `make_paper_outputs.py` pick them up with no further wiring (decided 2026-10-01).
   ```bash
   # 1. Merge first: the script refuses to run while unmerged raw CSVs exist (Trump has ~100).
   uv run python scripts/analysis/merge_results.py
@@ -104,7 +119,7 @@ These are dataset-level paired deltas: each variant minus its reference, matched
     - Gadarian dry run: 360 rows; 275 verified exactly, 85 unverifiable (they had padded topics), 0 failures.
     - Full write test on a copy of Gadarian: only the metric columns changed. The archive equals the original. TriTopic rows without short topics are unchanged (within 1e-16), and IRBO is unchanged for unpadded rows. No topic words are missing from the evaluation vocabulary any more.
   - Runs whose topic words weren't saved stay at the old protocol (`evaluation_protocol` empty), and the paper outputs stay "Preliminary" while any exist.
-  - [ ] After running it: re-check the ANES conclusions (MV-HDBSCAN / Feature-Stacking gains, NaiveFusion's coherence wins).
+  - [x] Re-check the ANES conclusions: the MV-HDBSCAN / Feature-Stacking ANES coherence gains were the padding artifact and are gone (2026-10-01). NaiveFusion's ANES coherence still needs a look in the dashboard.
   - [ ] Paper: describe the evaluation (no padding; topics with fewer than two distinct words excluded from coherence; Topic Diversity keeps the K × 10 denominator), report `n_topics_short` / `n_topics_unscored` per model and dataset, and make NPMI and C_V the primary coherence metrics, with UMass secondary (Yiq2: UMass correlates worst with human judgment).
 - [ ] **TriTopic realized topic count is not recorded.**
   - Cause: the grid parameter `n_topics` has the same name as the realized-count metric, and `src/optimizer.py` overwrites the metric with the requested value. The `n_topics` column therefore holds the *requested* k.
