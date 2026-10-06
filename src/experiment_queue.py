@@ -11,11 +11,16 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+
+from src.utils import get_random_state, load_config
 
 logger = logging.getLogger("pipeline")
 
 PROJECT_NAME = "ca_bertopic"
+EXPERIMENTS_DIR = Path(__file__).resolve().parents[1] / "experiments"
 
 DEFAULT_DATASETS = ("anes", "fed", "gadarian", "yelp")
 
@@ -23,9 +28,13 @@ DEFAULT_MEM = "32G"
 DEFAULT_CPUS = 4
 DEFAULT_TIME = "24:00:00"
 
+# STM trains in R on one core, inside the lightweight image built from
+# Dockerfile.stm and loaded on each node from $HOME/docker_images/.
+STM_MODEL = "stm"
 STM_MEM = "16G"
-STM_CPUS = 4
+STM_CPUS = 1
 STM_TIME = "24:00:00"
+STM_IMAGE = "cast:stm-lite-v0.2.0"
 
 ALL_MODELS = (
     "aligned_umap",
@@ -66,6 +75,27 @@ ALL_MODELS = (
 DEFAULT_MODEL_INDICES = tuple(range(1, 16))
 
 
+def stm_input_prefix(dataset: str, use_stemmed: bool) -> str:
+    """Returns the prefix of a dataset's STM inputs in data/processed.
+
+    Yelp STM configs train on the aligned 10k sample, as the neural Yelp
+    runs do.
+    """
+    base = "yelp_s10000" if dataset == "yelp" else dataset
+    return f"{base}_stemmed" if use_stemmed else base
+
+
+def count_config_runs(exp_target: str) -> int:
+    """Counts the (model, seed) runs a model-list config defines.
+
+    This is the range of `--model` indices `run_stm.py` accepts.
+    """
+    experiment = load_config(exp_target, EXPERIMENTS_DIR)
+    seeds = get_random_state(experiment["experiment"]["random_state"])
+    n_seeds = len(seeds) if isinstance(seeds, list) else 1
+    return len(experiment.get("models", [])) * n_seeds
+
+
 @dataclass(frozen=True)
 class SlurmJobConfig:
     """Configuration for a single resolved SLURM experiment job."""
@@ -84,6 +114,16 @@ class SlurmJobConfig:
     reservation: str | None = None
 
     @property
+    def is_stm(self) -> bool:
+        """Whether this job trains STM, which has its own worker."""
+        return self.model == STM_MODEL
+
+    @property
+    def exp_target(self) -> str:
+        """Return the experiment config path relative to experiments/."""
+        return f"{self.exp_dir}/{self.dataset}_standard_{self.model}"
+
+    @property
     def rep_flag(self) -> str:
         """Return the representation stopwords CLI flag."""
         return (
@@ -94,21 +134,33 @@ class SlurmJobConfig:
 
     @property
     def run_command(self) -> str:
-        """Construct the Python optimizer run command."""
-        exp_target = f"{self.exp_dir}/{self.dataset}_standard_{self.model}"
-        if self.model_idx is not None:
+        """Construct the Python run command the worker executes."""
+        model_arg = f" --model {self.model_idx}" if self.model_idx is not None else ""
+        if self.is_stm:
             return (
-                f"uv run python scripts/experiments/run_optimizer.py "
-                f"--exp {exp_target} --model {self.model_idx} {self.rep_flag}"
+                f"uv run python scripts/experiments/run_stm.py "
+                f"--exp {self.exp_target}{model_arg} --r-runner docker"
             )
         return (
             f"uv run python scripts/experiments/run_optimizer.py "
-            f"--exp {exp_target} {self.rep_flag}"
+            f"--exp {self.exp_target}{model_arg} {self.rep_flag}"
         )
+
+    @property
+    def stm_input_prefix(self) -> str:
+        """Return the prefix of this job's STM RDS and BoW files."""
+        return stm_input_prefix(self.dataset, self.job_dataset.endswith("_stemmed"))
 
     @property
     def data_copy_command(self) -> str:
         """Construct the rsync data copy command for this dataset."""
+        if self.is_stm:
+            src_dir = f"$HOME/{self.project_name}/data/processed"
+            prefix = self.stm_input_prefix
+            return (
+                f"rsync -a {src_dir}/{prefix}_stm_data.rds "
+                f"{src_dir}/{prefix}_bow.parquet data/processed/"
+            )
         if self.dataset == "yelp":
             src_file = (
                 f"$HOME/{self.project_name}/data/processed/"
@@ -143,12 +195,11 @@ class SlurmJobConfig:
 
     @property
     def worker_args(self) -> list[str]:
-        """Construct positional arguments passed to slurm_job.sh."""
-        args = [
-            self.dataset,
-            f"{self.exp_dir}/{self.dataset}_standard_{self.model}",
-            self.rep_flag,
-        ]
+        """Construct positional arguments for slurm_job.sh or slurm_stm_job.sh."""
+        if self.is_stm:
+            args = [self.stm_input_prefix, self.exp_target, STM_IMAGE]
+        else:
+            args = [self.dataset, self.exp_target, self.rep_flag]
         if self.model_idx is not None:
             args.append(str(self.model_idx))
         return args
@@ -400,16 +451,18 @@ def build_jobs(
     model_indices: list[int],
     use_stemmed: bool,
     keep_rep_stopwords: bool,
-    mem: str = DEFAULT_MEM,
-    cpus: int = DEFAULT_CPUS,
-    time_limit: str = DEFAULT_TIME,
+    mem: str | None = None,
+    cpus: int | None = None,
+    time_limit: str | None = None,
     project_name: str = PROJECT_NAME,
     reservation: str | None = None,
+    count_runs: Callable[[str], int] = count_config_runs,
 ) -> list[SlurmJobConfig]:
     """Build list of SlurmJobConfig objects for all dataset and model combinations.
 
-    Note that STM models are currently skipped with a warning, matching
-    legacy behavior.
+    STM jobs default to the STM resources, and split mode submits only the
+    run indices their config defines. STM has no bag-of-words that keeps
+    stopwords, so it is skipped when representation stopwords are kept.
 
     Args:
         datasets: Target datasets.
@@ -418,11 +471,12 @@ def build_jobs(
         model_indices: Model indices to run when split is True.
         use_stemmed: Whether to use stemmed dataset variant.
         keep_rep_stopwords: Whether to keep representation stopwords.
-        mem: SLURM memory allocation.
-        cpus: SLURM CPU allocation.
-        time_limit: SLURM time allocation.
+        mem: SLURM memory allocation; None uses the model's default.
+        cpus: SLURM CPU allocation; None uses the model's default.
+        time_limit: SLURM time allocation; None uses the model's default.
         project_name: Name of project repository.
         reservation: Optional SLURM reservation name.
+        count_runs: Returns the number of runs an experiment target defines.
 
     Returns:
         List of SlurmJobConfig objects.
@@ -434,49 +488,47 @@ def build_jobs(
         job_dataset = f"{dataset}_stemmed" if use_stemmed else dataset
 
         for model in models:
-            if model == "stm":
-                logger.warning(
-                    "Warning: Model 'stm' requested for dataset '%s', "
-                    "but STM jobs are currently disabled. Skipping.",
-                    dataset,
-                )
-                continue
-
-            if split:
-                for model_idx in model_indices:
-                    job_name = f"{job_dataset}_{model}_m{model_idx}"
-                    jobs.append(
-                        SlurmJobConfig(
-                            dataset=dataset,
-                            model=model,
-                            exp_dir=exp_dir,
-                            job_dataset=job_dataset,
-                            job_name=job_name,
-                            model_idx=model_idx,
-                            keep_rep_stopwords=keep_rep_stopwords,
-                            mem=mem,
-                            cpus=cpus,
-                            time_limit=time_limit,
-                            project_name=project_name,
-                            reservation=reservation,
-                        )
+            is_stm = model == STM_MODEL
+            indices = list(model_indices)
+            if is_stm:
+                if keep_rep_stopwords:
+                    logger.warning(
+                        "Skipping STM for dataset '%s': its bag-of-words only "
+                        "exists with stopwords removed.",
+                        dataset,
                     )
-            else:
-                job_name = f"{job_dataset}_{model}"
+                    continue
+                if split:
+                    exp_target = f"{exp_dir}/{dataset}_standard_{model}"
+                    n_runs = count_runs(exp_target)
+                    indices = [i for i in indices if i <= n_runs]
+                    if len(indices) < len(model_indices):
+                        logger.info(
+                            "%s defines %d runs; skipping run indices above it.",
+                            exp_target,
+                            n_runs,
+                        )
+
+            resources = {
+                "mem": mem or (STM_MEM if is_stm else DEFAULT_MEM),
+                "cpus": cpus or (STM_CPUS if is_stm else DEFAULT_CPUS),
+                "time_limit": time_limit or (STM_TIME if is_stm else DEFAULT_TIME),
+            }
+            runs = indices if split else [None]
+            for model_idx in runs:
+                suffix = f"_m{model_idx}" if model_idx is not None else ""
                 jobs.append(
                     SlurmJobConfig(
                         dataset=dataset,
                         model=model,
                         exp_dir=exp_dir,
                         job_dataset=job_dataset,
-                        job_name=job_name,
-                        model_idx=None,
+                        job_name=f"{job_dataset}_{model}{suffix}",
+                        model_idx=model_idx,
                         keep_rep_stopwords=keep_rep_stopwords,
-                        mem=mem,
-                        cpus=cpus,
-                        time_limit=time_limit,
                         project_name=project_name,
                         reservation=reservation,
+                        **resources,
                     )
                 )
 
@@ -493,9 +545,9 @@ def create_queue_plan(
     keep_rep_stopwords: bool,
     is_test: bool = False,
     dry_run: bool = False,
-    mem: str = DEFAULT_MEM,
-    cpus: int = DEFAULT_CPUS,
-    time_limit: str = DEFAULT_TIME,
+    mem: str | None = None,
+    cpus: int | None = None,
+    time_limit: str | None = None,
     project_name: str = PROJECT_NAME,
     allow_empty_datasets: bool = False,
     raw_exact_models: str | None = None,
@@ -513,9 +565,9 @@ def create_queue_plan(
         keep_rep_stopwords: Whether representation stopwords should be kept.
         is_test: Whether test mode is active.
         dry_run: Whether dry-run mode is active.
-        mem: SLURM memory allocation.
-        cpus: SLURM CPU allocation.
-        time_limit: SLURM time allocation.
+        mem: SLURM memory allocation; None uses each model's default.
+        cpus: SLURM CPU allocation; None uses each model's default.
+        time_limit: SLURM time allocation; None uses each model's default.
         project_name: Project name.
         allow_empty_datasets: For internal testing of dataset validation.
         raw_exact_models: User-specified exact model names.

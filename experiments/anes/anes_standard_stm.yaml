@@ -2,10 +2,9 @@ extends: "datasets/anes.yaml"
 
 experiment:
   name: "anes_standard_stm"
+  # Spectral initialization makes STM deterministic: other seeds refit the same model.
   random_state:
     - 36201624
-    - 62613654
-    - 57116123
   prevalence_formula: '~ as.factor(party_id) + years_of_education + age + as.factor(party_id):age'
 
 models:

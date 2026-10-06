@@ -31,21 +31,28 @@ foreach ($dataset in $datasets) {
     # Sampled Trump reuses trump's preprocessing and embeddings (see
     # docs/trump_downsampling.md), so only the sample and R objects are built.
     if ($dataset -eq "trump_s25000") {
-        Write-Host "[1/3] Sampling 25k documents from processed Trump embeddings..." -ForegroundColor Gray
+        Write-Host "[1/4] Sampling 25k documents from processed Trump embeddings..." -ForegroundColor Gray
         uv run python scripts/data_prep/sample_trump.py --n 25000
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to sample Trump 25k"
             exit $LASTEXITCODE
         }
 
-        Write-Host "[2/3] Building R BoW and STM representations (Unstemmed)..." -ForegroundColor Gray
+        Write-Host "[2/4] Tokenizing texts for the STM bag-of-words..." -ForegroundColor Gray
+        uv run python scripts/data_prep/build_bow_tokens.py --dataset $dataset
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to tokenize $dataset"
+            exit $LASTEXITCODE
+        }
+
+        Write-Host "[3/4] Building R BoW and STM representations (Unstemmed)..." -ForegroundColor Gray
         Rscript scripts/r_scripts/build_bow.R --dataset $dataset --text_col clean_text
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to build unstemmed BoW for $dataset"
             exit $LASTEXITCODE
         }
 
-        Write-Host "[3/3] Building R BoW and STM representations (Stemmed)..." -ForegroundColor Gray
+        Write-Host "[4/4] Building R BoW and STM representations (Stemmed)..." -ForegroundColor Gray
         Rscript scripts/r_scripts/build_bow.R --dataset $dataset --text_col clean_text_stemmed --output_suffix _stemmed
         if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to build stemmed BoW for $dataset"
@@ -56,7 +63,7 @@ foreach ($dataset in $datasets) {
 
     # 1. Build dataset
     if ($dataset -eq "yelp_s10000") {
-        Write-Host "[1/5] Building Yelp base dataset and early 10k sample..." -ForegroundColor Gray
+        Write-Host "[1/6] Building Yelp base dataset and early 10k sample..." -ForegroundColor Gray
         if ($SkipYelpConvert) {
             uv run scripts/data_prep/build_datasets.py --dataset yelp --skip-convert
         } else {
@@ -72,7 +79,7 @@ foreach ($dataset in $datasets) {
             exit $LASTEXITCODE
         }
     } else {
-        Write-Host "[1/5] Building dataset: $dataset..." -ForegroundColor Gray
+        Write-Host "[1/6] Building dataset: $dataset..." -ForegroundColor Gray
         if ($dataset -eq "yelp" -and $SkipYelpConvert) {
             uv run scripts/data_prep/build_datasets.py --dataset yelp --skip-convert
         } else {
@@ -85,7 +92,7 @@ foreach ($dataset in $datasets) {
     }
 
     # 2. Preprocess dataset (creates clean_text and clean_text_stemmed)
-    Write-Host "[2/5] Preprocessing dataset (Dual Version: Unstemmed + Stemmed)..." -ForegroundColor Gray
+    Write-Host "[2/6] Preprocessing dataset (Dual Version: Unstemmed + Stemmed)..." -ForegroundColor Gray
     uv run scripts/data_prep/preprocess_datasets.py --dataset $dataset
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to preprocess dataset: $dataset"
@@ -93,23 +100,31 @@ foreach ($dataset in $datasets) {
     }
 
     # 3. Generate sentence embeddings for both clean_text and clean_text_stemmed
-    Write-Host "[3/5] Generating embeddings for clean_text and clean_text_stemmed..." -ForegroundColor Gray
+    Write-Host "[3/6] Generating embeddings for clean_text and clean_text_stemmed..." -ForegroundColor Gray
     uv run scripts/data_prep/generate_embeddings.py --dataset $dataset --columns clean_text clean_text_stemmed
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to generate embeddings: $dataset"
         exit $LASTEXITCODE
     }
 
-    # 4. Build Unstemmed R BoW / STM representations
-    Write-Host "[4/5] Building R BoW and STM representations (Unstemmed)..." -ForegroundColor Gray
+    # 4. Tokenize both text columns with the topic-word analyzer for STM
+    Write-Host "[4/6] Tokenizing texts for the STM bag-of-words..." -ForegroundColor Gray
+    uv run python scripts/data_prep/build_bow_tokens.py --dataset $dataset
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to tokenize $dataset"
+        exit $LASTEXITCODE
+    }
+
+    # 5. Build Unstemmed R BoW / STM representations
+    Write-Host "[5/6] Building R BoW and STM representations (Unstemmed)..." -ForegroundColor Gray
     Rscript scripts/r_scripts/build_bow.R --dataset $dataset --text_col clean_text
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to build unstemmed BoW for $dataset"
         exit $LASTEXITCODE
     }
 
-    # 5. Build Stemmed R BoW / STM representations
-    Write-Host "[5/5] Building R BoW and STM representations (Stemmed)..." -ForegroundColor Gray
+    # 6. Build Stemmed R BoW / STM representations
+    Write-Host "[6/6] Building R BoW and STM representations (Stemmed)..." -ForegroundColor Gray
     Rscript scripts/r_scripts/build_bow.R --dataset $dataset --text_col clean_text_stemmed --output_suffix _stemmed
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to build stemmed BoW for $dataset"

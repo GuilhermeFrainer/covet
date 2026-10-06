@@ -13,6 +13,8 @@ notebooks/__marimo__/
 renv/*
 !renv/activate.R
 !renv/settings.json
+# STM exchange files between R and run_stm.py
+.stm_tmp/
 
 # Gemini
 .gemini/

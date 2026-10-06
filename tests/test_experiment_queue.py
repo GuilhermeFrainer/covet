@@ -4,17 +4,25 @@ from pathlib import Path
 
 import pytest
 
+from scripts.experiments.run_stm import resolve_stm_inputs
 from src.experiment_queue import (
     ALL_MODELS,
+    DEFAULT_CPUS,
     DEFAULT_DATASETS,
+    DEFAULT_MEM,
     DEFAULT_MODEL_INDICES,
+    STM_CPUS,
+    STM_IMAGE,
+    STM_MEM,
     apply_exclusions,
     build_jobs,
+    count_config_runs,
     create_queue_plan,
     parse_run_indices,
     resolve_datasets,
     resolve_models,
 )
+from src.utils import load_config
 
 EXPERIMENTS_DIR = Path(__file__).resolve().parents[1] / "experiments"
 
@@ -203,8 +211,7 @@ class TestJobConstruction:
             use_stemmed=False,
             keep_rep_stopwords=False,
         )
-        # stm is skipped because STM jobs are disabled
-        assert len(jobs) == 1
+        assert [job.model for job in jobs] == ["baseline", "stm"]
         job = jobs[0]
         assert job.dataset == "fed"
         assert job.model == "baseline"
@@ -368,8 +375,7 @@ class TestJobConstruction:
         ]
 
     def test_standard_vs_split_job_counts(self):
-        # STM jobs are disabled, so every model except stm yields one job
-        n_jobs = len(DEFAULT_DATASETS) * (len(ALL_MODELS) - 1)
+        n_jobs = len(DEFAULT_DATASETS) * len(ALL_MODELS)
         plan_standard = create_queue_plan(
             raw_datasets=None,
             raw_models=None,
@@ -390,7 +396,14 @@ class TestJobConstruction:
             use_stemmed=False,
             keep_rep_stopwords=False,
         )
-        assert plan_split.total_jobs == n_jobs * len(DEFAULT_MODEL_INDICES)
+        stm_runs = sum(
+            count_config_runs(f"{dataset}/{dataset}_standard_stm")
+            for dataset in DEFAULT_DATASETS
+        )
+        neural_jobs = len(DEFAULT_DATASETS) * (len(ALL_MODELS) - 1)
+        assert plan_split.total_jobs == (
+            neural_jobs * len(DEFAULT_MODEL_INDICES) + stm_runs
+        )
 
 
 class TestCreateQueuePlan:
@@ -410,9 +423,8 @@ class TestCreateQueuePlan:
         )
         assert plan.datasets == ("fed",)
         assert plan.models == ("baseline", "stm")
-        # stm skipped in jobs, only baseline remains
-        assert len(plan.jobs) == 1
-        assert plan.total_jobs == 1
+        assert [job.model for job in plan.jobs] == ["baseline", "stm"]
+        assert plan.total_jobs == 2
         assert plan.dry_run is True
 
     def test_reservation_job_construction(self):
@@ -471,3 +483,85 @@ class TestCreateQueuePlan:
         )
         assert plan.reservation is None
         assert plan.jobs[0].reservation is None
+
+
+class TestStmJobs:
+    """STM jobs run run_stm.py through their own worker and image."""
+
+    def _stm_job(self, dataset="fed", **kwargs):
+        options = {
+            "split": False,
+            "model_indices": [1],
+            "use_stemmed": False,
+            "keep_rep_stopwords": False,
+        }
+        options.update(kwargs)
+        return build_jobs(datasets=[dataset], models=["stm"], **options)
+
+    def test_standard_stm_job(self):
+        (job,) = self._stm_job()
+        assert job.is_stm
+        assert job.job_name == "fed_stm"
+        assert job.run_command == (
+            "uv run python scripts/experiments/run_stm.py "
+            "--exp fed/fed_standard_stm --r-runner docker"
+        )
+        assert job.worker_args == ["fed", "fed/fed_standard_stm", STM_IMAGE]
+        assert job.mem == STM_MEM
+        assert job.cpus == STM_CPUS
+
+    def test_neural_jobs_keep_default_resources(self):
+        jobs = build_jobs(
+            datasets=["fed"],
+            models=["baseline", "stm"],
+            split=False,
+            model_indices=[1],
+            use_stemmed=False,
+            keep_rep_stopwords=False,
+        )
+        assert (jobs[0].mem, jobs[0].cpus) == (DEFAULT_MEM, DEFAULT_CPUS)
+        assert (jobs[1].mem, jobs[1].cpus) == (STM_MEM, STM_CPUS)
+
+    def test_resource_overrides_apply_to_stm(self):
+        (job,) = self._stm_job(mem="64G", cpus=2, time_limit="02:00:00")
+        assert (job.mem, job.cpus, job.time_limit) == ("64G", 2, "02:00:00")
+
+    def test_split_stops_at_the_config_run_count(self):
+        jobs = self._stm_job(
+            split=True, model_indices=list(range(1, 16)), count_runs=lambda _: 5
+        )
+        assert [job.model_idx for job in jobs] == [1, 2, 3, 4, 5]
+        assert jobs[2].worker_args == ["fed", "fed/fed_standard_stm", STM_IMAGE, "3"]
+        assert "--model 3 --r-runner docker" in jobs[2].run_command
+
+    def test_skipped_when_rep_stopwords_are_kept(self):
+        assert self._stm_job(keep_rep_stopwords=True) == []
+
+    def test_stemmed_and_yelp_inputs(self):
+        (stemmed,) = self._stm_job(use_stemmed=True)
+        assert stemmed.worker_args[:2] == [
+            "fed_stemmed",
+            "fed_stemmed/fed_standard_stm",
+        ]
+        (yelp,) = self._stm_job(dataset="yelp")
+        assert yelp.stm_input_prefix == "yelp_s10000"
+        assert "yelp_s10000_stm_data.rds" in yelp.data_copy_command
+        assert "yelp_s10000_bow.parquet" in yelp.data_copy_command
+
+    @pytest.mark.parametrize("use_stemmed", [False, True])
+    @pytest.mark.parametrize("dataset", [*DEFAULT_DATASETS, "trump", "trump_s25000"])
+    def test_worker_inputs_match_run_stm(self, dataset, use_stemmed):
+        (job,) = self._stm_job(dataset=dataset, use_stemmed=use_stemmed)
+        config = load_config(job.exp_target, EXPERIMENTS_DIR)
+        _, rds_path, bow_path = resolve_stm_inputs(config["experiment"])
+        assert rds_path.name == f"{job.stm_input_prefix}_stm_data.rds"
+        assert bow_path.name == f"{job.stm_input_prefix}_bow.parquet"
+
+    def test_active_stm_configs_use_one_seed(self):
+        for path in EXPERIMENTS_DIR.glob("*/*_standard_stm.yaml"):
+            if "archive" in path.parts:
+                continue
+            exp_target = f"{path.parent.name}/{path.stem}"
+            config = load_config(exp_target, EXPERIMENTS_DIR)
+            assert len(config["experiment"]["random_state"]) == 1, exp_target
+            assert count_config_runs(exp_target) == len(config["models"])

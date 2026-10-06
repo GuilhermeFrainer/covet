@@ -67,13 +67,16 @@ To eliminate confounding between models, **all text preprocessing is executed 10
     uv run scripts/data_prep/generate_embeddings.py --dataset <dataset_name> --columns clean_text clean_text_stemmed
     ```
 
-5.  **Build BoW and STM Objects (R):**
+5.  **Build BoW and STM Objects:**
+    Python tokenizes both text columns with the analyzer BERTopic uses for topic words, so STM's vocabulary matches the neural models' (see [docs/stm.md](docs/stm.md)). R only splits those tokens:
     ```bash
+    uv run python scripts/data_prep/build_bow_tokens.py --dataset <dataset_name>
+
     # Unstemmed representation
     Rscript scripts/r_scripts/build_bow.R --dataset <dataset_name> --text_col clean_text
 
     # Stemmed representation
-    Rscript scripts/r_scripts/build_bow.R --dataset <dataset_name> --text_col clean_text_stemmed --output_suffix _stemmed
+    Rscript scripts/r_scripts/build_bow.R --dataset <dataset_name> --text_col clean_text_stemmed
     ```
 
 6.  **Automated Representation Pipeline (Windows PowerShell):**
@@ -89,7 +92,8 @@ To eliminate confounding between models, **all text preprocessing is executed 10
 The primary entry point for experiment batches is `scripts/pipelines/slurm/queue_exp.sh`.
 It delegates to `scripts/experiments/queue_exp.py`, which selects configurations and
 submits SLURM workers. Python experiment workers execute `scripts/experiments/run_optimizer.py`;
-STM uses its separate runner. Agents should use this batch workflow for experiment campaigns.
+STM jobs execute `scripts/experiments/run_stm.py`, training in R inside a container because the
+cluster has no R. Agents should use this batch workflow for experiment campaigns.
 
 Active production experiments are organized by dataset:
 - `experiments/<dataset>/`: Standard unstemmed runs (`<dataset>_standard_*.yaml`).
@@ -137,13 +141,13 @@ By default, BERTopic's c-TF-IDF representation layer removes English stop words 
 
 ### Running STM Baseline Experiments
 
-To run Structural Topic Model baselines via R:
+On the cluster, queue STM like any other model (`-m stm`); see [docs/stm.md](docs/stm.md) for the container image and its upload. To run it directly:
 ```bash
-# Standard unstemmed STM
+# Standard unstemmed STM with the local R installation
 uv run python scripts/experiments/run_stm.py --exp fed/fed_standard_stm
 
-# Stemmed STM
-uv run python scripts/experiments/run_stm.py --exp fed_stemmed/fed_standard_stm
+# Stemmed STM, one K, in the STM container
+uv run python scripts/experiments/run_stm.py --exp fed_stemmed/fed_standard_stm --model 1 --r-runner docker
 ```
 
 STM trains on the same preprocessing level as the models it is compared against: configs with `text_col: clean_text_stemmed` load `<dataset>_stemmed_stm_data.rds` and `<dataset>_stemmed_bow.parquet`, and all others load the unstemmed files.
@@ -244,6 +248,7 @@ uv run pytest
 │   ├── REPOSITORY_ISSUES.md   # Open issue tracker
 │   ├── experiments_summary.md # Experimental campaign and model taxonomy
 │   ├── model_catalog.md       # Model priorities and baseline–ablation mapping
+│   ├── stm.md                 # STM parity, container image, and cluster runs
 │   ├── pairwise_*.md          # Pairwise comparison proposal (partially implemented)
 │   ├── project_structure.md   # Script-level directory guide
 │   ├── ...                    # Preprocessing, stopwords, results separation, merging
@@ -305,7 +310,7 @@ uv run pytest
 *   **BERTopic:** Modular topic modeling framework.
 *   **mvlearn:** Multi-view learning algorithms (Multi-View K-Means, Multi-View Spectral, Co-regularized Spectral).
 *   **FastTriTopic / TriTopic:** Multi-modal graph topic modeling integrating text embeddings and document metadata via sparse graph laplacians with vectorized coordinate construction.
-*   **Structural Topic Model (STM) / R (`quanteda`, `stm`):** Semi-parametric topic modeling incorporating document covariates.
+*   **Structural Topic Model (STM) / R (`quanteda`, `stm`):** Semi-parametric topic modeling incorporating document covariates, trained in a lightweight R container on the cluster.
 *   **SentenceTransformers:** Contextual text representation models (default: `all-MiniLM-L6-v2`).
 *   **OCTIS & gensim:** Coherence evaluation metrics (`c_v`, `u_mass`).
 *   **Polars & PyArrow:** High-performance tabular data manipulation and Parquet storage.

@@ -17,6 +17,7 @@ from bertopic import BERTopic
 from gensim.corpora.dictionary import Dictionary
 from gensim.models.coherencemodel import CoherenceModel
 from octis.evaluation_metrics.diversity_metrics import get_word2index, rbo
+from sklearn.feature_extraction.text import CountVectorizer
 
 # Recorded with every result so rows scored under different rules are never
 # pooled. Rows without it were scored with padded topics and raw-text
@@ -34,19 +35,47 @@ def topic_words_to_octis(topic_words: list[list[str]]) -> dict[str, list[list[st
     return {"topics": topic_words}
 
 
+# Candidate words per topic before numeric words are dropped. Matches the
+# `top_n_words` default that src.models gives BERTopic.
+TOP_N_CANDIDATE_WORDS = 50
+
+
 def get_top_words_from_beta(
     beta: np.ndarray, vocab: list[str], topk: int = 10
 ) -> list[list[str]]:
-    """
-    Extracts the top k words for each topic from a beta matrix (K x V).
+    """Extracts each topic's top words from a beta matrix (K x V).
+
+    Words are ranked by probability and filtered with `select_topic_words`,
+    exactly as BERTopic topic words are, so numeric words never count.
     """
     topic_words = []
     for topic_beta in beta:
         # Assuming beta is either probabilities or log-probabilities
-        top_indices = np.argsort(topic_beta)[::-1][:topk]
-        words = [vocab[i] for i in top_indices]
-        topic_words.append(words)
+        top_indices = np.argsort(topic_beta)[::-1][:TOP_N_CANDIDATE_WORDS]
+        topic_words.append(select_topic_words([vocab[i] for i in top_indices], topk))
     return topic_words
+
+
+def representation_vectorizer(remove_stop_words: bool = True) -> CountVectorizer:
+    """Builds the vectorizer behind every topic-word vocabulary.
+
+    BERTopic variants use it for c-TF-IDF, and the STM bag-of-words is built
+    with its analyzer, so both model families draw topic words from the same
+    tokens.
+    """
+    return CountVectorizer(stop_words="english" if remove_stop_words else None)
+
+
+def representation_tokens(texts: list[str], analyzer=None) -> list[list[str]]:
+    """Tokenizes documents the way topic words are extracted.
+
+    Applies BERTopic's c-TF-IDF preprocessing and then the analyzer, which
+    defaults to `representation_vectorizer()`'s. Documents left without
+    tokens come back as empty lists, aligned with `texts`.
+    """
+    if analyzer is None:
+        analyzer = representation_vectorizer().build_analyzer()
+    return [analyzer(bertopic_preprocess(text)) for text in texts]
 
 
 def bertopic_preprocess(text: str) -> str:

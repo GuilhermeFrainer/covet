@@ -68,20 +68,28 @@ Each dataset can be regenerated manually using the Python and R CLI scripts:
    uv run scripts/data_prep/generate_embeddings.py --dataset <dataset_name> --columns clean_text clean_text_stemmed
    ```
 
-### B. BoW & STM Representation Generation (R)
-R ingests the pre-cleaned Python text without applying R-side stopword removal or stemming:
+### B. BoW & STM Representation Generation
+Python also tokenizes the bag-of-words, with the same analyzer BERTopic uses for c-TF-IDF topic words (`CountVectorizer(stop_words="english")` on punctuation-stripped text). R only splits these tokens on whitespace, so it performs no lowercasing, filtering, stopword removal, or stemming. STM and the neural models therefore share one vocabulary; see [stm.md](stm.md).
 
-1. **Unstemmed BoW & STM (`clean_text`):**
+1. **Tokens for both text columns:**
+   ```bash
+   uv run scripts/data_prep/build_bow_tokens.py --dataset <dataset_name>
+   ```
+   *Output:* `data/interim/<dataset_name>_bow_tokens.parquet`, built from the embeddings file so rows and metadata match the neural models.
+
+2. **Unstemmed BoW & STM (`clean_text`):**
    ```bash
    Rscript scripts/r_scripts/build_bow.R --dataset <dataset_name> --text_col clean_text
    ```
    *Outputs:* `data/processed/<dataset_name>_bow.parquet` and `data/processed/<dataset_name>_stm_data.rds`.
 
-2. **Stemmed BoW & STM (`clean_text_stemmed`):**
+3. **Stemmed BoW & STM (`clean_text_stemmed`):**
    ```bash
-   Rscript scripts/r_scripts/build_bow.R --dataset <dataset_name> --text_col clean_text_stemmed --output_suffix _stemmed
+   Rscript scripts/r_scripts/build_bow.R --dataset <dataset_name> --text_col clean_text_stemmed
    ```
    *Outputs:* `data/processed/<dataset_name>_stemmed_bow.parquet` and `data/processed/<dataset_name>_stemmed_stm_data.rds`.
+
+Documents left without tokens (only stopwords) are dropped from STM; at most 25 per corpus.
 
 ---
 

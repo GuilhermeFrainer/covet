@@ -1,10 +1,9 @@
 extends: datasets/yelp_stemmed.yaml
 experiment:
   name: yelp_stemmed_standard_stm
+  # Spectral initialization makes STM deterministic: other seeds refit the same model.
   random_state:
   - 36201624
-  - 62613654
-  - 57116123
   dataset_path: data/processed/yelp_s10000_embeddings.parquet
   prevalence_formula: ~ date + stars + user_average_stars + yelping_since + business_stars
     + as.factor(state)

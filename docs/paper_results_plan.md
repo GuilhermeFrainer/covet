@@ -145,7 +145,7 @@ These are dataset-level paired deltas: each variant minus its reference, matched
 - [ ] Weighted Append sweep on **Trump** (~420 s per run)
 - [ ] *(optional)* Finish FastTriTopic on Trump (5 runs missing)
 - [ ] *(optional)* MV-HDBSCAN / Co-Reg on `trump_s25000`, to get the 5th dataset for those families
-- [ ] *(optional, decide)* STM. Run the stemmed/unstemmed STM, or drop it from the quantitative results (see [[#6. Drop or defer]])
+- [ ] *(optional, decide)* STM. Run the stemmed/unstemmed STM, or drop it from the quantitative results (see [[#6. Drop or defer]]). It now queues like any other model (`queue_exp.sh -d <datasets> -m stm --split`, 5 jobs per dataset); upload the image first ([stm.md](stm.md))
 
 ---
 
@@ -195,6 +195,10 @@ These are dataset-level paired deltas: each variant minus its reference, matched
 - [ ] Evaluation measures: add the AMI description (why AMI over NMI: chance-adjusted, comparable across different cluster counts)
 - [ ] Results: rewrite the per-dataset subsections from the old May numbers, or replace them with family-based subsections
 - [ ] Limitations: n = 5 significance floor, missing STM, Trump coverage gaps, single-membership assumption
+- [ ] If STM is reported, state in Methods (details in [stm.md](stm.md)):
+  - STM's vocabulary uses the same tokenizer and stop-word list as the c-TF-IDF representation of the embedding-based models (reviewer concern on preprocessing parity)
+  - Spectral initialization is deterministic, so STM is one run per K, not a seed average
+  - **AMI discrepancy:** STM's AMI uses each document's most probable topic (argmax of theta), discarding the rest of its topic mixture, so it is not strictly comparable to the hard-clustering models' AMI
 - [ ] Resource usage: update to cluster hardware and the list of LLMs used
 - [ ] Conclusion: drop "given the strong performance of COVET₃"
 

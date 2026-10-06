@@ -1,7 +1,8 @@
 """Master CLI script to select and queue experiments on SLURM.
 
 Provides command-line argument parsing and orchestration, delegating domain
-logic to src.experiment_queue and worker execution to scripts/experiments/slurm_job.sh.
+logic to src.experiment_queue and worker execution to scripts/experiments/slurm_job.sh
+(STM: scripts/experiments/slurm_stm_job.sh).
 """
 
 from __future__ import annotations
@@ -18,16 +19,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import src.logger_config as logger_config
-from src.experiment_queue import (
-    DEFAULT_CPUS,
-    DEFAULT_MEM,
-    DEFAULT_TIME,
-    QueuePlan,
-    create_queue_plan,
-)
+from src.experiment_queue import QueuePlan, create_queue_plan
 
 LOG_DIR = PROJECT_ROOT / "logs"
 DEFAULT_WORKER_SCRIPT = PROJECT_ROOT / "scripts" / "experiments" / "slurm_job.sh"
+STM_WORKER_SCRIPT = PROJECT_ROOT / "scripts" / "experiments" / "slurm_stm_job.sh"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -181,7 +177,7 @@ Examples:
         dest="mem",
         type=str,
         default=None,
-        help="Override memory per job (e.g. 16G, 64G).",
+        help="Override memory per job (default: 32G; STM: 16G).",
     )
 
     parser.add_argument(
@@ -189,7 +185,7 @@ Examples:
         dest="cpus",
         type=int,
         default=None,
-        help="Override CPUs per task (e.g. 4, 8).",
+        help="Override CPUs per task (default: 4; STM: 1).",
     )
 
     parser.add_argument(
@@ -197,7 +193,7 @@ Examples:
         dest="time",
         type=str,
         default=None,
-        help="Override time limit per job (e.g. 12:00:00).",
+        help="Override time limit per job (default: 24:00:00).",
     )
 
     parser.add_argument(
@@ -205,7 +201,10 @@ Examples:
         dest="worker_script",
         type=str,
         default=None,
-        help="Path to SLURM worker script (default: scripts/experiments/slurm_job.sh).",
+        help=(
+            "Path to SLURM worker script for non-STM models "
+            "(default: scripts/experiments/slurm_job.sh)."
+        ),
     )
 
     parser.add_argument(
@@ -292,8 +291,12 @@ def submit_jobs(
     plan: QueuePlan,
     worker_script: Path | str,
     runner: Callable = subprocess.run,
+    stm_worker_script: Path | str = STM_WORKER_SCRIPT,
 ) -> None:
-    """Execute or simulate submission of all jobs in the plan."""
+    """Execute or simulate submission of all jobs in the plan.
+
+    STM jobs go to `stm_worker_script`, every other job to `worker_script`.
+    """
     Path("slurm_log").mkdir(parents=True, exist_ok=True)
 
     for job_count, job in enumerate(plan.jobs, 1):
@@ -326,7 +329,8 @@ def submit_jobs(
                     f"Dataset: {job.dataset} | Model: {job.model}"
                 )
 
-            sbatch_cmd = job.full_sbatch_command(str(worker_script))
+            script = stm_worker_script if job.is_stm else worker_script
+            sbatch_cmd = job.full_sbatch_command(str(script))
             runner(sbatch_cmd, check=True)
 
     print("------------------------------------------------")
@@ -361,9 +365,9 @@ def main(argv: list[str] | None = None) -> int:
             keep_rep_stopwords=args.keep_rep_stopwords,
             is_test=args.test,
             dry_run=args.dry_run,
-            mem=args.mem or DEFAULT_MEM,
-            cpus=args.cpus if args.cpus is not None else DEFAULT_CPUS,
-            time_limit=args.time or DEFAULT_TIME,
+            mem=args.mem,
+            cpus=args.cpus,
+            time_limit=args.time,
             reservation=args.reservation,
         )
     except ValueError as e:

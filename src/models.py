@@ -5,8 +5,8 @@ import mvlearn.cluster as mvcluster
 import numpy as np
 import polars as pl
 from bertopic import BERTopic
-from sklearn.feature_extraction.text import CountVectorizer
 
+from src import evaluation
 from src.mvc_wrapper import MVCWrapper
 
 
@@ -213,7 +213,7 @@ def create_bertopic_instance(
     should_remove_stop_words = remove_rep_stopwords or config_stop_words
 
     if should_remove_stop_words and "vectorizer_model" not in bertopic_params:
-        bertopic_params["vectorizer_model"] = CountVectorizer(stop_words="english")
+        bertopic_params["vectorizer_model"] = evaluation.representation_vectorizer()
 
     # Return the assembled object
     return BERTopic(

@@ -83,7 +83,7 @@ Resolves metric mismatch (semantic text is angular/Cosine; metadata is magnitude
 * **`fast_tritopic`**: Vectorized coordinate construction and sparse Laplacian solver for high-performance TriTopic.
 
 ### 2.8 Parametric / Econometric Baseline
-* **`stm`**: Structural Topic Model (Roberts et al.) trained in R (`stm`, `quanteda`) using document-level prevalence covariates, evaluated via the exact same Python evaluation pipeline for benchmark parity.
+* **`stm`**: Structural Topic Model (Roberts et al.) trained in R (`stm`, `quanteda`) using document-level prevalence covariates, evaluated via the exact same Python evaluation pipeline for benchmark parity. Its bag-of-words uses the neural models' topic-word tokenizer, and spectral initialization makes it deterministic, so each K is a single run (see [stm.md](stm.md)).
 
 ---
 

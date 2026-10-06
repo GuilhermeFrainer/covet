@@ -15,10 +15,14 @@ def extract_stm_qualitative_data(
     model_id: str,
     metadata: dict,
     topk: int = 10,
+    top_words: list[list[str]] | None = None,
 ) -> pl.DataFrame:
     """
     Extracts qualitative data from STM outputs (theta, beta) in a format
     compatible with the existing BERTopic qualitative data schema.
+
+    Pass the evaluated `top_words` so the saved representations are the words
+    that were scored; otherwise the `topk` most probable words are used.
     """
     import json
 
@@ -28,10 +32,11 @@ def extract_stm_qualitative_data(
     counts = np.sum(theta, axis=0)
 
     # 2. Representations (top words)
-    top_words = []
-    for i in range(n_topics):
-        top_indices = np.argsort(beta[i])[::-1][:topk]
-        top_words.append([vocab[idx] for idx in top_indices])
+    if top_words is None:
+        top_words = []
+        for i in range(n_topics):
+            top_indices = np.argsort(beta[i])[::-1][:topk]
+            top_words.append([vocab[idx] for idx in top_indices])
 
     # 3. Representative documents (top 3 documents for each topic)
     rep_docs = []

@@ -21,7 +21,7 @@ The sample size is a parameter: `sample_trump.py --n <size>` produces `trump_s<s
 | File | Consumer |
 | :--- | :--- |
 | `data/processed/trump_s25000_embeddings.parquet` | Python models ([run_optimizer.py](../scripts/experiments/run_optimizer.py)) |
-| `data/interim/trump_s25000_processed.parquet` | [build_bow.R](../scripts/r_scripts/build_bow.R) input |
+| `data/interim/trump_s25000_bow_tokens.parquet` | [build_bow.R](../scripts/r_scripts/build_bow.R) input, from [build_bow_tokens.py](../scripts/data_prep/build_bow_tokens.py) |
 | `data/processed/trump_s25000_stm_data.rds`, `trump_s25000_bow.parquet` | Unstemmed STM |
 | `data/processed/trump_s25000_stemmed_stm_data.rds`, `trump_s25000_stemmed_bow.parquet` | Stemmed STM |
 
@@ -31,8 +31,9 @@ Rows are sorted by `index` after sampling so the file keeps the corpus's origina
 
 ```bash
 uv run python scripts/data_prep/sample_trump.py --n 25000
+uv run python scripts/data_prep/build_bow_tokens.py --dataset trump_s25000
 Rscript scripts/r_scripts/build_bow.R --dataset trump_s25000 --text_col clean_text
-Rscript scripts/r_scripts/build_bow.R --dataset trump_s25000 --text_col clean_text_stemmed --output_suffix _stemmed
+Rscript scripts/r_scripts/build_bow.R --dataset trump_s25000 --text_col clean_text_stemmed
 ```
 
 [build_representations.ps1](../scripts/pipelines/local_windows/build_representations.ps1) runs these steps right after `trump`.
@@ -61,11 +62,11 @@ The full Yelp corpus is about 16 GB and was chunked during earlier preprocessing
 
 ### What is still rebuilt
 
-The bag-of-words and STM objects are rebuilt from the sampled rows. Subsetting the full-corpus RDS would keep vocabulary terms that never occur in the sample, which changes the STM input: the stemmed vocabulary is 24,150 terms for the sample against 39,818 for the full corpus.
+The bag-of-words and STM objects are rebuilt from the sampled rows. Subsetting the full-corpus RDS would keep vocabulary terms that never occur in the sample, which changes the STM input: the stemmed vocabulary is 23,718 terms for the sample against 39,021 for the full corpus.
 
 ### Sample profile
 
-All 25,000 documents are kept by the RDS conversion. Every binary covariate (`is_retweet`, `is_deleted`, `is_flagged`) keeps both levels, so STM factor terms remain estimable. `device` keeps 18 of its 20 levels; the two dropped levels each had a single document in the full corpus.
+The RDS conversion keeps every document with at least one token: 24,990 unstemmed and 24,988 stemmed (the rest contain only stopwords; see [stm.md](stm.md)). Every binary covariate (`is_retweet`, `is_deleted`, `is_flagged`) keeps both levels, so STM factor terms remain estimable. `device` keeps 18 of its 20 levels; the two dropped levels each had a single document in the full corpus.
 
 ---
 

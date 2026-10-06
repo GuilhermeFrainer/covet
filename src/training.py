@@ -110,8 +110,9 @@ def train_and_evaluate(
     ):
         # BERTopic strips punctuation before fitting c-TF-IDF, so its topic
         # words (e.g. "economyno") exist only in the preprocessed text.
-        analyzer = topic_model.vectorizer_model.build_analyzer()
-        tokenized_texts = [analyzer(evaluation.bertopic_preprocess(t)) for t in text]
+        tokenized_texts = evaluation.representation_tokens(
+            text, topic_model.vectorizer_model.build_analyzer()
+        )
     else:
         tokenized_texts = [t.lower().split() for t in text]
 

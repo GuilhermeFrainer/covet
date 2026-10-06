@@ -2,10 +2,9 @@ extends: "datasets/fed.yaml"
 
 experiment:
   name: "fed_standard_stm"
+  # Spectral initialization makes STM deterministic: other seeds refit the same model.
   random_state:
     - 36201624
-    - 62613654
-    - 57116123
   prevalence_formula: '~ gdp_monthly + gdp_monthly_lag + gdp_yearly + gdp_yearly_lag + cpi_monthly + cpi_monthly_lag + cpi_yearly + cpi_yearly_lag + funds_rate + funds_rate_lag + unemployment + unemployment_lag + as.factor(type) + as.factor(president) + as.factor(party) + as.factor(fed_chair)'
 
 models:

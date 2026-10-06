@@ -23,6 +23,7 @@ The top-level `batch/` directory has been removed, and its contents have been re
 │   ├── experiments/            # Core model training/execution entry points
 │   │   ├── queue_exp.py
 │   │   ├── slurm_job.sh
+│   │   ├── slurm_stm_job.sh
 │   │   ├── run_optimizer.py
 │   │   └── run_stm.py
 │   │
@@ -41,7 +42,6 @@ The top-level `batch/` directory has been removed, and its contents have been re
 │   │
 │   ├── r_scripts/              # R-specific execution scripts
 │   │   ├── build_bow.R
-│   │   ├── stm_smoke_test.R
 │   │   └── train_stm.R
 │   │
 │   ├── pipelines/              # Orchestrators and batch runner scripts
@@ -66,13 +66,15 @@ This directory contains scripts for data ingestion, cleaning, feature engineerin
 - **[sample_yelp_interim.py](../scripts/data_prep/sample_yelp_interim.py)**: Samples 10,000 documents from the interim Yelp parquet data before preprocessing.
 - **[sample_trump.py](../scripts/data_prep/sample_trump.py)**: Samples a fixed subset (default 25,000 documents) of the preprocessed, embedded Trump dataset into `trump_s<n>` files (see [trump_downsampling.md](trump_downsampling.md)).
 - **[generate_stemmed_configs.py](../scripts/data_prep/generate_stemmed_configs.py)**: Generates the `experiments/<dataset>_stemmed/` YAML configurations from the standard ones.
+- **[build_bow_tokens.py](../scripts/data_prep/build_bow_tokens.py)**: Tokenizes both text columns with the topic-word analyzer for the STM bag-of-words (see [stm.md](stm.md)).
 
 ### 2. Experiments ([scripts/experiments/](../scripts/experiments))
 Contains the batch dispatcher and experiment workers. Start experiment batches with [queue_exp.sh](../scripts/pipelines/slurm/queue_exp.sh).
 - **[queue_exp.py](../scripts/experiments/queue_exp.py)**: Selects configurations and submits SLURM jobs through the shell entry point.
 - **[slurm_job.sh](../scripts/experiments/slurm_job.sh)**: Executes a queued job.
+- **[slurm_stm_job.sh](../scripts/experiments/slurm_stm_job.sh)**: Executes a queued STM job, loading the STM container image on the node first.
 - **[run_optimizer.py](../scripts/experiments/run_optimizer.py)**: Runs individual Python experiment configurations, including fixed parameters and parameter grids; also used by SLURM workers.
-- **[run_stm.py](../scripts/experiments/run_stm.py)**: A Python wrapper to coordinate R-based Structural Topic Model training.
+- **[run_stm.py](../scripts/experiments/run_stm.py)**: Trains STM in R (locally or in the container) and evaluates it in Python (see [stm.md](stm.md)).
 
 ### 3. Analysis & Evaluation ([scripts/analysis/](../scripts/analysis))
 Scripts for processing, evaluating, and compiling results.
@@ -90,9 +92,8 @@ Scripts for processing, evaluating, and compiling results.
 
 ### 4. R Scripts ([scripts/r_scripts/](../scripts/r_scripts))
 Keeps R language scripts separated from the Python codebase.
-- **[build_bow.R](../scripts/r_scripts/build_bow.R)**: Generates bag-of-words (BoW) representations and saves STM-compatible RDS data objects.
-- **[train_stm.R](../scripts/r_scripts/train_stm.R)**: Subroutine executing the training of Structural Topic Models in R.
-- **[stm_smoke_test.R](../scripts/r_scripts/stm_smoke_test.R)**: Trains a tiny STM on 200 Trump documents to check the R environment. It is the default command of the `Dockerfile.stm` image and is used by `scripts/pipelines/slurm/slurm_hello.sh`.
+- **[build_bow.R](../scripts/r_scripts/build_bow.R)**: Splits the Python-tokenized texts into a bag-of-words and saves STM-compatible RDS data objects.
+- **[train_stm.R](../scripts/r_scripts/train_stm.R)**: Trains one STM and exports beta, theta, and the vocabulary for evaluation. It runs in the [Dockerfile.stm](../Dockerfile.stm) image on the cluster; `scripts/pipelines/slurm/slurm_hello.sh` checks that a node can run that image.
 
 ### 5. Pipelines & Orchestration ([scripts/pipelines/](../scripts/pipelines))
 Consolidates sequential execution and batch runners.

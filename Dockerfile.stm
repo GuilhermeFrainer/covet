@@ -1,40 +1,19 @@
-# Use rocker/r-ver for a stable Ubuntu-based R environment
-FROM rocker/r-ver:4.4.1
+# Minimal R environment for training STM baselines on the cluster.
+#
+# The image holds only R and the packages scripts/r_scripts/train_stm.R needs.
+# Code and data are mounted at run time and evaluation runs in Python outside
+# the container (see scripts/experiments/run_stm.py), so no build context is
+# needed:
+#   docker build --platform linux/amd64 -t cast:stm-lite-v0.2.0 - < Dockerfile.stm
+FROM rocker/r-ver:4.5.0
 
-# 1. Install system dependencies for R packages (stm, jsonlite, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libcurl4-openssl-dev \
-    libssl-dev \
-    libxml2-dev \
-    libfontconfig1-dev \
-    libharfbuzz-dev \
-    libfribidi-dev \
-    libfreetype6-dev \
-    libpng-dev \
-    libtiff5-dev \
-    libjpeg-dev \
-    cmake \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# A dated Posit Package Manager snapshot of prebuilt Ubuntu binaries, so
+# nothing compiles. This date matches renv.lock (stm 1.3.8, data.table 1.18.4,
+# quanteda 4.4), so the image fits the same packages as a local renv run.
+ARG CRAN_SNAPSHOT=https://p3m.dev/cran/__linux__/noble/2026-05-14
+RUN install2.r --error --skipinstalled --ncpus -1 -r ${CRAN_SNAPSHOT} stm optparse \
+    && rm -rf /tmp/downloaded_packages /tmp/*.rds
 
-# Set the working directory
-WORKDIR /app
+WORKDIR /work
 
-# 2. Copy renv configuration files
-# We copy these first to leverage Docker's layer caching
-COPY renv.lock .Rprofile ./
-COPY renv/activate.R renv/activate.R
-COPY renv/settings.json renv/settings.json
-
-# 3. Restore the R environment using renv
-# This will install all packages listed in renv.lock
-# NOTE: This step can take 15-30 minutes as it compiles packages from source
-RUN R -e "install.packages('renv', repos='https://cloud.r-project.org')" \
-    && R -e "renv::restore()"
-
-# 4. Copy the script into the container
-COPY scripts/r_scripts/stm_smoke_test.R /app/stm_smoke_test.R
-
-# Define the command that runs when the container starts
-CMD ["Rscript", "/app/stm_smoke_test.R"]
+CMD ["Rscript", "-e", "library(stm); library(data.table); library(optparse); sessionInfo()"]

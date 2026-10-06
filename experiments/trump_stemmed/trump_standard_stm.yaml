@@ -1,10 +1,9 @@
 extends: datasets/trump_stemmed.yaml
 experiment:
   name: trump_stemmed_standard_stm
+  # Spectral initialization makes STM deterministic: other seeds refit the same model.
   random_state:
   - 36201624
-  - 62613654
-  - 57116123
   prevalence_formula: ~ log(favorites + 1) + log(retweets + 1) + date + as.factor(device)
     + as.factor(is_retweet) + as.factor(is_deleted) + as.factor(is_flagged)
 models:

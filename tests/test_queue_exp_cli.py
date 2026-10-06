@@ -12,7 +12,7 @@ from scripts.experiments.queue_exp import (
     main,
     submit_jobs,
 )
-from src.experiment_queue import create_queue_plan
+from src.experiment_queue import STM_IMAGE, create_queue_plan
 
 
 @pytest.fixture(autouse=True)
@@ -260,6 +260,35 @@ class TestSubmissionAndMain:
         assert "Job: fed_tritopic" in captured
         assert "fast_tritopic" not in captured
         assert "Dry run complete (1 jobs simulated)." in captured
+
+    def test_submit_jobs_routes_stm_to_its_worker(self, capsys):
+        plan = create_queue_plan(
+            raw_datasets="fed",
+            raw_models="baseline,stm",
+            raw_excludes=None,
+            raw_runs=None,
+            split=False,
+            use_stemmed=False,
+            keep_rep_stopwords=False,
+            dry_run=False,
+        )
+        mock_runner = MagicMock()
+        submit_jobs(
+            plan,
+            worker_script="slurm_job.sh",
+            runner=mock_runner,
+            stm_worker_script="slurm_stm_job.sh",
+        )
+        baseline_cmd, stm_cmd = (call[0][0] for call in mock_runner.call_args_list)
+        assert "slurm_job.sh" in baseline_cmd
+        assert "slurm_stm_job.sh" not in baseline_cmd
+        assert stm_cmd[-4:] == [
+            "slurm_stm_job.sh",
+            "fed",
+            "fed/fed_standard_stm",
+            STM_IMAGE,
+        ]
+        assert "--cpus-per-task=1" in stm_cmd
 
     def test_submit_jobs_dry_run_with_reservation(self, capsys):
         plan = create_queue_plan(

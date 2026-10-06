@@ -2,10 +2,9 @@ extends: "datasets/gadarian.yaml"
 
 experiment:
   name: "gadarian_standard_stm"
+  # Spectral initialization makes STM deterministic: other seeds refit the same model.
   random_state:
     - 36201624
-    - 62613654
-    - 57116123
   prevalence_formula: '~ as.factor(treatment) + as.factor(partisanship) + as.factor(treatment):as.factor(partisanship)'
 
 models:
