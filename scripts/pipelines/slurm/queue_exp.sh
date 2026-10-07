@@ -13,4 +13,6 @@ if [ ! -f "${REPO_ROOT}/scripts/experiments/queue_exp.py" ]; then
     REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 fi
 
-exec uv run python "${REPO_ROOT}/scripts/experiments/queue_exp.py" "$@"
+# --project selects the repository's environment from any working directory
+# (e.g. a symlink in ~/slurm); --no-sync never reinstalls it on the login node.
+exec uv run --project "${REPO_ROOT}" --no-sync python "${REPO_ROOT}/scripts/experiments/queue_exp.py" "$@"

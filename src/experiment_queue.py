@@ -15,8 +15,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.utils import get_random_state, load_config
-
 logger = logging.getLogger("pipeline")
 
 PROJECT_NAME = "ca_bertopic"
@@ -90,6 +88,9 @@ def count_config_runs(exp_target: str) -> int:
 
     This is the range of `--model` indices `run_stm.py` accepts.
     """
+    # Imported here so queueing other models needs only the standard library.
+    from src.utils import get_random_state, load_config
+
     experiment = load_config(exp_target, EXPERIMENTS_DIR)
     seeds = get_random_state(experiment["experiment"]["random_state"])
     n_seeds = len(seeds) if isinstance(seeds, list) else 1

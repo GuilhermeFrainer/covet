@@ -1,6 +1,9 @@
 """Tests for scripts/experiments/queue_exp.py CLI and orchestration."""
 
 import logging
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,6 +26,23 @@ def cleanup_pipeline_logger():
         handler.close()
         logger.removeHandler(handler)
     logger.propagate = True
+
+
+def test_cli_imports_without_third_party_packages():
+    # The login-node wrapper must not depend on the project's scientific stack.
+    code = (
+        "import sys\n"
+        "for name in ('numpy', 'polars', 'yaml'):\n"
+        "    sys.modules[name] = None\n"
+        "import scripts.experiments.queue_exp\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 class TestQueueExpCLIParser:
