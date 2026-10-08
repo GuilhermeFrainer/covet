@@ -34,7 +34,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 DATA_DIR: Path = PROJECT_ROOT / "data/processed"
 CONFIG_DIR: Path = PROJECT_ROOT / "experiments/datasets"
-OUTPUT_PATH: Path = PROJECT_ROOT / "tables/dataset_summary.tex"
+# Next to the other paper tables (scripts/analysis/make_paper_outputs.py).
+OUTPUT_PATH: Path = (
+    Path.home() / "Downloads" / "covet_paper_outputs" / "tables" / "dataset_summary.tex"
+)
 TEXT_COL: str = "text"
 DOC_ID_COL: str = "id"
 TOKEN_COUNT_COL: str = "token_count"
@@ -51,7 +54,7 @@ DEFAULT_DATASETS: tuple[str, ...] = (
 
 DATASET_LABELS: dict[str, str] = {
     "anes": "ANES",
-    "fed": "FED",
+    "fed": "Fed",
     "gadarian": "Gadarian",
     "trump": "Trump (full)",
     "trump_s25000": "Trump",
@@ -252,7 +255,8 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=OUTPUT_PATH,
-        help="LaTeX output path (default: tables/dataset_summary.tex).",
+        help="LaTeX output path (default: "
+        "~/Downloads/covet_paper_outputs/tables/dataset_summary.tex).",
     )
     return parser.parse_args()
 
