@@ -24,6 +24,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import polars as pl
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -122,7 +124,15 @@ def main():
     benchmark_preliminary = paper_outputs.is_preliminary(results, sources)
     flagged.append(benchmark_preliminary)
     all_metrics = paper_outputs.TABLE_METRICS + paper_outputs.APPENDIX_METRICS
-    scores = paper_benchmark.dataset_scores(results, benchmark_models, all_metrics)
+    # TriTopic's results record the requested topic count; count its exports.
+    realized = paper_benchmark.realized_topic_counts(
+        results.filter(
+            pl.col("catalog_id").is_in(list(paper_benchmark.REQUESTED_COUNT_MODELS))
+        )["run_uid"].to_list()
+    )
+    scores = paper_benchmark.dataset_scores(
+        results, benchmark_models, all_metrics, realized
+    )
     for name, metrics, label in (
         ("benchmark", paper_outputs.TABLE_METRICS, "tab:benchmark"),
         (

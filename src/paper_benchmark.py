@@ -12,6 +12,7 @@ differences are not tested here: they come from the planned comparisons.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -33,15 +34,17 @@ from src.paper_outputs import (
     paper_label,
 )
 
-BENCHMARK_CONFIG = (
-    Path(__file__).resolve().parents[1] / "config" / "paper_benchmark.yaml"
-)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BENCHMARK_CONFIG = PROJECT_ROOT / "config" / "paper_benchmark.yaml"
+ASSIGNMENTS_DIR = PROJECT_ROOT / "output" / "document_assignments"
 # Columns holding the requested topic count, by model family: HDBSCAN models
 # store it in `nr_topics`, spectral and K-Means models in `n_clusters`, and
 # TriTopic in `n_topics` (where it overwrote the realized count).
 REQUESTED_TOPIC_COLUMNS = ("requested_topics", "nr_topics", "n_clusters", "n_topics")
 # Models whose `n_topics` holds the requested, not the realized, topic count.
+# Their realized count is read from the run's exported topics instead.
 REQUESTED_COUNT_MODELS = {"tritopic", "fast_tritopic"}
+NOISE_TOPIC = -1
 
 
 def load_benchmark_models(path: Path = BENCHMARK_CONFIG) -> list[dict]:
@@ -56,6 +59,26 @@ def load_benchmark_models(path: Path = BENCHMARK_CONFIG) -> list[dict]:
     return models
 
 
+def realized_topic_counts(
+    run_uids, assignments_dir: Path = ASSIGNMENTS_DIR
+) -> dict[str, int]:
+    """Non-noise topics per run, counted from its exported `topics.json`.
+
+    Exports live under `<assignments_dir>/<dataset>/<run_uid>/`. Runs without
+    an export are left out of the result.
+    """
+    counts = {}
+    for run_uid in run_uids:
+        if not run_uid:
+            continue
+        for path in assignments_dir.glob(f"*/{run_uid}/topics.json"):
+            with open(path, encoding="utf-8") as handle:
+                topics = json.load(handle)
+            counts[run_uid] = sum(t["topic_id"] != NOISE_TOPIC for t in topics)
+            break
+    return counts
+
+
 def _requested_topics(results: pl.DataFrame) -> pl.Expr:
     columns = [c for c in REQUESTED_TOPIC_COLUMNS if c in results.columns]
     return pl.coalesce(
@@ -63,12 +86,19 @@ def _requested_topics(results: pl.DataFrame) -> pl.Expr:
     ).alias("requested")
 
 
-def dataset_scores(results: pl.DataFrame, models: list[dict], metrics) -> pl.DataFrame:
+def dataset_scores(
+    results: pl.DataFrame,
+    models: list[dict],
+    metrics,
+    realized: dict[str, int] | None = None,
+) -> pl.DataFrame:
     """Per model and dataset: run count, completeness and mean scores.
 
     A model is complete on a dataset when every requested topic count is
     present for each of its seeds and every metric is scored. For each
     dataset, the first complete source in the model's `sources` is used.
+    `realized` maps `run_uid` to the realized topic count of runs in
+    `REQUESTED_COUNT_MODELS` (see `realized_topic_counts`).
     """
     standard = results.filter(pl.col("condition") == STANDARD_CONDITION).with_columns(
         _requested_topics(results),
@@ -91,7 +121,9 @@ def dataset_scores(results: pl.DataFrame, models: list[dict], metrics) -> pl.Dat
                 )
                 if runs.is_empty():
                     continue
-                candidate = _summarize(runs, model["id"], source, dataset, metrics)
+                candidate = _summarize(
+                    runs, model["id"], source, dataset, metrics, realized or {}
+                )
                 if chosen is None or (candidate["Complete"] and not chosen["Complete"]):
                     chosen = candidate
                 if chosen["Complete"]:
@@ -101,7 +133,9 @@ def dataset_scores(results: pl.DataFrame, models: list[dict], metrics) -> pl.Dat
     return pl.DataFrame(rows, infer_schema_length=None) if rows else pl.DataFrame()
 
 
-def _summarize(runs: pl.DataFrame, model_id, source, dataset, metrics) -> dict:
+def _summarize(
+    runs: pl.DataFrame, model_id, source, dataset, metrics, realized: dict
+) -> dict:
     seeds = runs["seed"].n_unique()
     scored = all(
         metric in runs.columns
@@ -121,8 +155,14 @@ def _summarize(runs: pl.DataFrame, model_id, source, dataset, metrics) -> dict:
             if metric in runs.columns
             else None
         )
-    topics = runs["n_topics"].cast(pl.Float64, strict=False).mean()
-    row["n_topics"] = None if source in REQUESTED_COUNT_MODELS else topics
+    if source in REQUESTED_COUNT_MODELS:
+        uids = runs["run_uid"].to_list() if "run_uid" in runs.columns else []
+        counts = [realized.get(uid) for uid in uids]
+        row["n_topics"] = (
+            sum(counts) / len(counts) if counts and None not in counts else None
+        )
+    else:
+        row["n_topics"] = runs["n_topics"].cast(pl.Float64, strict=False).mean()
     return row
 
 
@@ -319,7 +359,7 @@ def benchmark_table_latex(
             + "); mean over those only."
         )
     if requested_only:
-        caption += r" TriTopic's realized topic count was not recorded."
+        caption += r" TriTopic's realized topic count is unavailable."
     if note:
         caption += " " + _latex_escape(note)
     if preliminary:

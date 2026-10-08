@@ -1,5 +1,7 @@
 """Free-for-all benchmark table (T2)."""
 
+import json
+
 import numpy as np
 import polars as pl
 import pytest
@@ -29,6 +31,7 @@ def _runs(model, datasets=BENCHMARK_DATASETS, score=0.1, column="nr_topics"):
         for seed in SEEDS:
             for k in REQUESTED_TOPICS:
                 row = {
+                    "run_uid": f"{model}-{dataset}-{seed}-{k}",
                     "catalog_id": model,
                     "dataset_label": dataset,
                     "condition": "remove_rep_stopwords",
@@ -132,6 +135,29 @@ def test_scores_drop_the_leading_zero():
     assert paper_benchmark._score(-0.033) == "$-.033$"
     assert paper_benchmark._score(-7.574) == "$-7.574$"
     assert paper_benchmark._score(None) == "--"
+
+
+def test_tritopic_realized_topics_come_from_exported_topics(tmp_path):
+    results = _results()
+    tritopic = results.filter(pl.col("catalog_id").str.ends_with("tritopic"))
+    # Every run lost one topic and has a noise topic, which is not counted.
+    for row in tritopic.iter_rows(named=True):
+        run_dir = tmp_path / row["dataset_label"] / row["run_uid"]
+        run_dir.mkdir(parents=True)
+        topics = [{"topic_id": i} for i in range(-1, row["n_topics"] - 1)]
+        (run_dir / "topics.json").write_text(json.dumps(topics), encoding="utf-8")
+    realized = paper_benchmark.realized_topic_counts(
+        [*tritopic["run_uid"].to_list(), None, "missing"], tmp_path
+    )
+    assert len(realized) == tritopic.height
+    scores = paper_benchmark.dataset_scores(results, MODELS, ("c_npmi",), realized)
+    counts = scores.filter(pl.col("Model ID") == "tritopic")["n_topics"]
+    # Requested 10..50 (mean 30), realized one fewer.
+    assert counts.to_list() == pytest.approx([29.0] * 5)
+    # Without the exports the count stays unknown.
+    partial = dict(list(realized.items())[1:])
+    scores = paper_benchmark.dataset_scores(results, MODELS, ("c_npmi",), partial)
+    assert scores.filter(pl.col("Model ID") == "tritopic")["n_topics"].null_count() == 1
 
 
 def test_benchmark_config_names_catalog_models():

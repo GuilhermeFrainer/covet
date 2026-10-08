@@ -46,7 +46,7 @@ All outputs come from `uv run python scripts/analysis/make_paper_outputs.py` (Tr
 - [x] **T2 – Free-for-all** (main text, single column): `tables/benchmark.tex`; appendix metrics in `benchmark_appendix.tex`; per-dataset scores in `benchmark_datasets.csv`
   - [x] Mean score and average Friedman rank per metric (only models complete on all 5 datasets are ranked; the others are marked)
   - [x] Iman–Davenport p and Kendall's W per metric; no post-hoc pairwise tests
-  - [x] Realized topic count column (not available for TriTopic)
+  - [x] Realized topic count column (TriTopic: counted from its exported `topics.json`, since its results record the requested count)
   - [ ] Includes STM automatically once its results are merged (check that its requested K is read from `n_topics`, `nr_topics` or `n_clusters`)
 - [ ] **F1 – Metadata alignment** (main text): dose-response figure, Δ metrics and AMI against w
 - [ ] **T3 – Noise coverage** (appendix): presented HDBSCAN models only; drop "Mean noise docs"
