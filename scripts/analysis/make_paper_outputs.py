@@ -71,9 +71,11 @@ def main():
         else args.output_dir / args.trump
     )
     tables_dir, figures_dir = output_dir / "tables", output_dir / "figures"
+    # The paper's Trump dataset is the 25k sample, stated in the text; only a
+    # non-default choice is named in the captions.
     note = (
         ""
-        if args.trump == "trump"
+        if args.trump == "trump_s25000"
         else f"Trump results use the {TRUMP_VARIANTS[args.trump]}."
     )
 
