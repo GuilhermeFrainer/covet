@@ -53,7 +53,7 @@ All outputs come from `uv run python scripts/analysis/make_paper_outputs.py` (Tr
 - [ ] **T4 – Qualitative example**: keep `fed_qualitative_example_v3`
 - [ ] *(optional)* **F2 – Trade-off scatter**: Δ NPMI against Δ IRBO
 - [ ] **Appendix tables**: Diversity and UMass versions of T1/T2
-- [ ] Fill the AMI gaps: backfill Fed Aligned UMAP and Fed Append UMAP (see [Missing runs](#missing-runs))
+- [ ] Fill the AMI gaps: re-run Fed Aligned UMAP and Fed Append UMAP (a backfill is not possible; see [Missing runs](#missing-runs)). Until then their ΔAMI in T1 covers 4 datasets (marked †).
 - [ ] Tests, ruff, and a pdflatex compile of every table
 - [ ] `\input` the outputs into the tex; remove `combined_avg5`, `demsar_delta_yelp_no_stopword_removal` and `all_datasets_demsar_all_vs_all`
 
@@ -135,7 +135,7 @@ Coverage of the standard results on 2026-10-08 (15 runs = 3 seeds × 5 topic cou
 - [ ] **COVET$_\text{MH}$**: Trump-25k (15)
 - [ ] **COVET$_\text{FS}$**: Trump-25k (15)
 - [ ] **COVET$_\text{CT}$ (MV Spectral)**: Yelp (15)
-- [ ] **AMI backfill** (no training, a backfill run): Fed `aligned_umap` and `append_umap`
+- [ ] **COVET$_\text{Al}$ and COVET$_\text{Ap}$ on Fed** (15 each): re-run so AMI can be computed. Their Sept 17 runs (revision `4b4f18e`) predate the document-assignment export, so they have no `run_uid` and no per-document topics, and the AMI backfill cannot score them. Fold into the FED re-run after the chunking fix.
 - [x] Trump-25k metrics recomputed under the current evaluation protocol (2026-10-08; its runs came from revision `17fde45`, before the fix). Original archived as `results/archive/trump_s25000_standard_merged_pre_recompute_20261008_151449.zip`.
 - [ ] *(later)* FED and Yelp: rebuild and re-run every model after the chunking fix (`29a6e6f`)
 
