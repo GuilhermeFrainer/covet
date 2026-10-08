@@ -12,6 +12,7 @@ from transformers import AutoTokenizer
 from src.processing import (
     add_log_transformation,
     chunk_text_with_overlap,
+    count_tokens,
     format_as_yaml,
     process_dataset,
     remove_urls,
@@ -122,7 +123,7 @@ def test_chunk_text_with_overlap(tmp_path):
     # Mocking the tokenizer to have predictable token counts for testing
     original_encode = tokenizer.encode
 
-    def mock_encode(text, add_special_tokens=False):
+    def mock_encode(text, add_special_tokens=False, **kwargs):
         return list(range(len(text.split())))
 
     tokenizer.encode = mock_encode
@@ -144,10 +145,6 @@ def test_chunk_text_with_overlap(tmp_path):
 def minilm_tokenizer():
     """The embedder's tokenizer, unmocked."""
     return AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
-
-
-def count_tokens(tokenizer, text):
-    return len(tokenizer.encode(text, add_special_tokens=False))
 
 
 def test_split_long_sentence_fits_and_keeps_words(minilm_tokenizer):
@@ -364,3 +361,24 @@ def test_process_dataset_derives_text_columns_per_chunk(sample_yelp_df, tmp_path
     first = processed_df.filter(pl.col("id") == processed_df["id"][0])
     assert first.height > 1
     assert first["clean_text_stemmed"].n_unique() == first.height
+
+
+def test_counting_long_text_does_not_warn(caplog):
+    """Measuring a document over the tokenizer's 512 tokens logs no warning."""
+    from transformers.utils import logging as transformers_logging
+
+    # A fresh tokenizer: the warning fires only once per instance.
+    tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+    transformers_logging.enable_propagation()
+    try:
+        with caplog.at_level("WARNING"):
+            n = count_tokens(tokenizer, "word " * 1000)
+            split_long_sentence("word " * 1000, tokenizer, max_tokens=254)
+        assert n == 1000
+        assert "longer than the specified maximum" not in caplog.text
+        # The check is live: without the guard, the same text does warn.
+        with caplog.at_level("WARNING"):
+            tokenizer.encode("word " * 1000, add_special_tokens=False)
+        assert "longer than the specified maximum" in caplog.text
+    finally:
+        transformers_logging.disable_propagation()

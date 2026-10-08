@@ -194,6 +194,19 @@ def format_as_yaml(df: pl.DataFrame, columns: list[str]) -> pl.Series:
     return struct_series.map_elements(lambda x: to_yaml_string(x), return_dtype=pl.Utf8)
 
 
+def count_tokens(tokenizer: PreTrainedTokenizer, text: str) -> int:
+    """WordPiece tokens in `text`, without the special tokens."""
+    # Chunking tokenizes whole documents only to measure them. The tokenizer
+    # warns ("Token indices sequence length is longer than the specified
+    # maximum ... will result in indexing errors") for any text longer than
+    # its model_max_length of 512, BERT's position-embedding limit, because
+    # it cannot tell counting from model input. These IDs never reach the
+    # model: every chunk is at most MAX_CHUNK_TOKENS, and the embedder
+    # truncates its input to 256 tokens anyway. The warning is noise here,
+    # so it is turned off.
+    return len(tokenizer.encode(text, add_special_tokens=False, verbose=False))
+
+
 def split_long_sentence(
     sentence: str, tokenizer: PreTrainedTokenizer, max_tokens: int
 ) -> list[str]:
@@ -202,8 +215,10 @@ def split_long_sentence(
     Pieces end on word boundaries, so each keeps its own tokenization. A
     single word longer than max_tokens is cut inside the word.
     """
+    # verbose=False: the sentence may exceed the tokenizer's 512-token limit;
+    # see count_tokens for why that warning does not apply here.
     encoding = tokenizer(
-        sentence, add_special_tokens=False, return_offsets_mapping=True
+        sentence, add_special_tokens=False, return_offsets_mapping=True, verbose=False
     )
     offsets = encoding["offset_mapping"]
     word_ids = encoding.word_ids()
@@ -273,7 +288,7 @@ def chunk_text_with_overlap(
             new_rows.append(row)
             continue
 
-        total_tokens = len(tokenizer.encode(original_text, add_special_tokens=False))
+        total_tokens = count_tokens(tokenizer, original_text)
 
         if total_tokens <= max_tokens:
             new_row = row.copy()
@@ -285,16 +300,14 @@ def chunk_text_with_overlap(
         sentences = []
         sentence_tokens = []
         for sentence in nltk.sent_tokenize(original_text):
-            n_tokens = len(tokenizer.encode(sentence, add_special_tokens=False))
+            n_tokens = count_tokens(tokenizer, sentence)
             if n_tokens <= max_tokens:
                 sentences.append(sentence)
                 sentence_tokens.append(n_tokens)
                 continue
             for piece in split_long_sentence(sentence, tokenizer, max_tokens):
                 sentences.append(piece)
-                sentence_tokens.append(
-                    len(tokenizer.encode(piece, add_special_tokens=False))
-                )
+                sentence_tokens.append(count_tokens(tokenizer, piece))
         if not sentences:
             continue
 
