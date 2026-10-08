@@ -1,273 +1,303 @@
-"""
-Script to summarize NLP datasets using Polars LazyFrames and export to LaTeX.
+"""Summarizes the processed datasets and exports a LaTeX table.
 
-This script computes core statistics for the datasets used in the
-CA-BERTopic project, including basic counts, preprocessing metrics,
-and descriptive statistics for token counts. It is optimized for memory
-efficiency using Polars LazyFrames and avoids expensive operations
-like explode().
+Statistics come in two groups with consistent units:
+
+* Document level (before chunking): raw, dropped and retained documents,
+  covariates, words, sentences and words per document. Each retained
+  document is counted once, from its original ``text``.
+* Chunk level (model input): chunks, and the mean and maximum WordPiece
+  tokens per chunk from the ``token_count`` column written by the chunker.
+
+Chunking (``src/processing.py``) splits long documents
+into chunks that overlap by two sentences and repeats the document's original
+``text`` on every chunk row. Summing per-row text would therefore count long
+documents several times, so document-level statistics deduplicate on ``id``.
+
+Usage:
+    uv run python scripts/data_prep/summarize_datasets.py
+    uv run python scripts/data_prep/summarize_datasets.py --datasets anes trump
 """
 
+import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
+import nltk
 import polars as pl
 import yaml
-from great_tables import GT
 
-# Add project root to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Global constants for configuration
 DATA_DIR: Path = PROJECT_ROOT / "data/processed"
 CONFIG_DIR: Path = PROJECT_ROOT / "experiments/datasets"
+OUTPUT_PATH: Path = PROJECT_ROOT / "tables/dataset_summary.tex"
 TEXT_COL: str = "text"
-CLEAN_TEXT_COL: str = "clean_text"
-OUTPUT_DIR: Path = PROJECT_ROOT / "tables"
+DOC_ID_COL: str = "id"
+TOKEN_COUNT_COL: str = "token_count"
 
-# Mapping of dataset keys to their raw/interim source for original count
-RAW_PATHS = {
-    "trump": PROJECT_ROOT / "data/raw/trump_tweets.csv",
-    "yelp": PROJECT_ROOT / "data/interim/yelp_reviews.parquet",
-    "yelp_s10000": PROJECT_ROOT / "data/interim/yelp_s10000_unchunked.parquet",
-    "fed": PROJECT_ROOT / "data/interim/fed_communications.parquet",
-    "anes": PROJECT_ROOT / "data/interim/anes_2008.parquet",
-    "anes_stemmed": PROJECT_ROOT / "data/interim/anes_2008.parquet",
-    "gadarian": PROJECT_ROOT / "data/interim/gadarian.parquet",
+# Datasets reported by default. Trump is reported as the 25k sample, which is
+# what the heaviest models train on (see docs/trump_downsampling.md).
+DEFAULT_DATASETS: tuple[str, ...] = (
+    "anes",
+    "fed",
+    "gadarian",
+    "trump_s25000",
+    "yelp_s10000",
+)
+
+DATASET_LABELS: dict[str, str] = {
+    "anes": "ANES",
+    "fed": "FED",
+    "gadarian": "Gadarian",
+    "trump": "Trump (full)",
+    "trump_s25000": "Trump",
+    "yelp_s10000": "Yelp",
 }
 
+# Documents before preprocessing. None marks a sample drawn from an already
+# preprocessed corpus, whose raw count equals its retained count.
+RAW_PATHS: dict[str, Path | None] = {
+    "anes": PROJECT_ROOT / "data/interim/anes_2008.parquet",
+    "fed": PROJECT_ROOT / "data/interim/fed_communications.parquet",
+    "gadarian": PROJECT_ROOT / "data/interim/gadarian.parquet",
+    "trump": PROJECT_ROOT / "data/raw/trump_tweets.csv",
+    "trump_s25000": None,
+    "yelp_s10000": PROJECT_ROOT / "data/interim/yelp_s10000_raw.parquet",
+}
 
-def get_raw_count(dataset_key: str) -> int:
-    """Gets the row count from the original raw file."""
-    path = RAW_PATHS.get(dataset_key)
-    if not path or not path.exists():
-        logging.warning(f"Raw path not found for {dataset_key}: {path}")
-        return 0
+# Covariate configs whose name differs from the dataset key.
+CONFIG_NAMES: dict[str, str] = {"yelp_s10000": "yelp"}
 
-    try:
-        if path.suffix == ".csv":
-            return pl.scan_csv(path).select(pl.len()).collect().item()
-        else:
-            return pl.scan_parquet(path).select(pl.len()).collect().item()
-    except Exception as e:
-        logging.error(f"Error reading raw file {path}: {e}")
-        return 0
+# Samples drawn after preprocessing, described in a table note.
+SAMPLE_PARENTS: dict[str, str] = {"trump_s25000": "trump"}
 
+DOCUMENT_SECTION = "Documents"
+CHUNK_SECTION = "Chunks (model input)"
 
-def get_metadata_counts() -> Dict[str, int]:
-    """Reads YAML configs to get the count of covariates for each dataset."""
-    counts = {}
-    for yaml_file in CONFIG_DIR.glob("*.yaml"):
-        with open(yaml_file, "r") as f:
-            config = yaml.safe_load(f)
-            # Use the filename (minus extension) as key, but also handle mapping
-            # if the filename doesn't match the dataset name in the parquet.
-            # In our case, anes_stemmed.yaml and anes.yaml both exist.
-            dataset_name = yaml_file.stem
-
-            covariates = config.get("covariates", {})
-            total_metadata = 0
-            for group in ["numerical", "categorical", "binary"]:
-                total_metadata += len(covariates.get(group, []))
-
-            counts[dataset_name] = total_metadata
-
-    return counts
+# (statistic key, row label, section, decimals), in table order.
+TABLE_ROWS: tuple[tuple[str, str, str, int], ...] = (
+    ("raw_docs", "Raw documents", DOCUMENT_SECTION, 0),
+    ("dropped_docs", "Dropped", DOCUMENT_SECTION, 0),
+    ("documents", "Retained", DOCUMENT_SECTION, 0),
+    ("covariates", "Covariates", DOCUMENT_SECTION, 0),
+    ("words", "Words", DOCUMENT_SECTION, 0),
+    ("sentences", "Sentences", DOCUMENT_SECTION, 0),
+    ("words_per_doc", "Words / document", DOCUMENT_SECTION, 1),
+    ("chunks", "Chunks", CHUNK_SECTION, 0),
+    ("tokens_per_chunk", "Tokens / chunk (mean)", CHUNK_SECTION, 1),
+    ("max_tokens_per_chunk", "Tokens / chunk (max)", CHUNK_SECTION, 0),
+)
 
 
-def compute_dataset_summary(file_path: Path, metadata_count: int) -> Dict[str, Any]:
-    """Computes a statistical summary for a single dataset.
+def count_rows(path: Path) -> int:
+    """Returns the number of rows in a CSV or Parquet file."""
+    lf = pl.scan_csv(path) if path.suffix == ".csv" else pl.scan_parquet(path)
+    return lf.select(pl.len()).collect().item()
 
-    Args:
-        file_path: Path to the parquet dataset file.
-        metadata_count: Pre-calculated number of metadata columns.
 
-    Returns:
-        A dictionary containing the computed metrics.
-    """
-    if not file_path.exists():
-        return {"Dataset": file_path.name, "Error": "File not found"}
-
-    dataset_key = file_path.name.replace("_embeddings.parquet", "")
-    raw_count = get_raw_count(dataset_key)
-
-    # Initialize LazyFrame and select only required columns to save memory
-    lf = pl.scan_parquet(file_path)
-
-    available_cols = lf.collect_schema().names()
-
-    # n_unique of 'id' gives the number of documents that passed preprocessing
-    # For Yelp sampled embeddings, we use 'index' to count original source documents
-    # and we treat the raw_count (from the un-chunked sample) as the target for Kept Docs
-    if dataset_key == "yelp_s10000" and "index" in available_cols:
-        kept_docs_expr = pl.col("index").n_unique()
-    elif "id" in available_cols:
-        kept_docs_expr = pl.col("id").n_unique()
-    else:
-        logging.warning(
-            f"Column for document counting not found in {file_path.name}. 'Kept Docs' will be estimated as 'Total Chunks'."
-        )
-        kept_docs_expr = pl.len()
-
-    cols_to_select = [TEXT_COL, CLEAN_TEXT_COL]
-    if "id" in available_cols:
-        cols_to_select.append("id")
-    if "index" in available_cols:
-        cols_to_select.append("index")
-
-    # For the Yelp sample, the 'Original' count is the number of documents
-    # we sampled, which is the raw_count of the un-chunked interim file.
-    # To show 0 dropped, we ensure Kept Docs matches this for the sample.
-    if dataset_key == "yelp_s10000":
-        final_kept_expr = pl.lit(raw_count)
-    else:
-        final_kept_expr = kept_docs_expr
-
-    summary_lf = lf.select(
-        [
-            pl.lit(dataset_key).alias("Dataset"),
-            pl.lit(raw_count).alias("Original Docs"),
-            final_kept_expr.alias("Kept Docs"),
-            pl.len().alias("Total Chunks"),
-            pl.lit(metadata_count).alias("Metadata Cols"),
-            pl.col(TEXT_COL).str.count_matches(r"\S+").alias("token_counts"),
-            pl.col(TEXT_COL).str.count_matches(r"[\.\!\?]").alias("sentence_counts"),
-        ]
-    ).select(
-        [
-            pl.col("Dataset"),
-            pl.col("Original Docs"),
-            (pl.col("Original Docs") - pl.col("Kept Docs")).alias("Dropped Docs"),
-            pl.col("Total Chunks"),
-            pl.col("Metadata Cols"),
-            pl.col("token_counts").sum().alias("Total Tokens"),
-            pl.col("sentence_counts").sum().alias("Total Sentences"),
-            pl.col("token_counts").mean().alias("Avg Tokens/Chunk"),
-        ]
+def count_covariates(dataset_key: str, config_dir: Path = CONFIG_DIR) -> int:
+    """Counts the covariates declared in a dataset's YAML config."""
+    config_path = config_dir / f"{CONFIG_NAMES.get(dataset_key, dataset_key)}.yaml"
+    with open(config_path, "r", encoding="utf-8") as f:
+        covariates = yaml.safe_load(f).get("covariates", {})
+    return sum(
+        len(covariates.get(group) or [])
+        for group in ("numerical", "categorical", "binary")
     )
 
-    return summary_lf.collect().to_dicts()[0]
+
+def count_sentences(text: str) -> int:
+    """Counts sentences with the segmenter the chunker uses.
+
+    A non-empty text without terminal punctuation is one sentence, which is
+    the common case for short survey answers.
+    """
+    if not text or not text.strip():
+        return 0
+    return max(1, len(nltk.sent_tokenize(text)))
+
+
+def summarize_dataset(
+    embeddings_path: Path, raw_docs: int | None, covariates: int
+) -> dict[str, Any]:
+    """Computes document- and chunk-level statistics for one dataset.
+
+    Args:
+        embeddings_path: The dataset's processed ``*_embeddings.parquet``.
+        raw_docs: Documents before preprocessing, or None when the dataset is
+            a sample of preprocessed documents and nothing was dropped.
+        covariates: Number of covariates in the dataset config.
+
+    Returns:
+        A mapping from each statistic key in ``TABLE_ROWS`` to its value.
+    """
+    lf = pl.scan_parquet(embeddings_path)
+
+    chunk_stats = lf.select(
+        pl.len().alias("chunks"),
+        pl.col(TOKEN_COUNT_COL).mean().alias("tokens_per_chunk"),
+        pl.col(TOKEN_COUNT_COL).max().alias("max_tokens_per_chunk"),
+    ).collect()
+
+    # Every chunk row repeats its document's original text, so keep one row
+    # per document before counting words and sentences.
+    documents = (
+        lf.select(DOC_ID_COL, TEXT_COL)
+        .unique(subset=DOC_ID_COL, keep="first")
+        .collect()
+    )
+    words = documents[TEXT_COL].str.count_matches(r"\S+").sum()
+    sentences = sum(count_sentences(text) for text in documents[TEXT_COL])
+    n_docs = documents.height
+    raw = n_docs if raw_docs is None else raw_docs
+
+    return {
+        "raw_docs": raw,
+        "dropped_docs": raw - n_docs,
+        "documents": n_docs,
+        "covariates": covariates,
+        "words": words,
+        "sentences": sentences,
+        "words_per_doc": words / n_docs if n_docs else 0.0,
+        "chunks": chunk_stats["chunks"].item(),
+        "tokens_per_chunk": chunk_stats["tokens_per_chunk"].item(),
+        "max_tokens_per_chunk": chunk_stats["max_tokens_per_chunk"].item(),
+    }
+
+
+def sample_note(dataset_key: str, data_dir: Path = DATA_DIR) -> str | None:
+    """Describes a post-preprocessing sample relative to its parent corpus."""
+    parent = SAMPLE_PARENTS.get(dataset_key)
+    if parent is None:
+        return None
+
+    def count_documents(path: Path) -> int:
+        return (
+            pl.scan_parquet(path).select(pl.col(DOC_ID_COL).n_unique()).collect().item()
+        )
+
+    label = DATASET_LABELS.get(dataset_key, dataset_key)
+    sample_size = count_documents(data_dir / f"{dataset_key}_embeddings.parquet")
+    note = f"{label}: random sample of {sample_size:,}"
+    parent_path = data_dir / f"{parent}_embeddings.parquet"
+    if parent_path.exists():
+        note += f" of the {count_documents(parent_path):,} preprocessed documents"
+        raw_path = RAW_PATHS.get(parent)
+        if raw_path is not None and raw_path.exists():
+            note += f" ({count_rows(raw_path):,} raw)"
+    return note + "."
+
+
+def build_table(summaries: dict[str, dict[str, Any]]) -> pl.DataFrame:
+    """Lays out formatted statistics, one row per statistic, one column per dataset."""
+    return pl.DataFrame(
+        {
+            "Section": [section for _, _, section, _ in TABLE_ROWS],
+            "Statistic": [label for _, label, _, _ in TABLE_ROWS],
+            **{
+                DATASET_LABELS.get(key, key): [
+                    f"{stats[stat]:,.{decimals}f}"
+                    for stat, _, _, decimals in TABLE_ROWS
+                ]
+                for key, stats in summaries.items()
+            },
+        }
+    )
+
+
+def to_latex(table: pl.DataFrame, notes: list[str]) -> str:
+    """Renders the summary table as a small booktabs LaTeX table."""
+    dataset_cols = [c for c in table.columns if c not in ("Section", "Statistic")]
+    n_cols = len(dataset_cols) + 1
+    lines = [
+        r"\begin{table}[!t]",
+        r"\small",
+        r"\centering",
+        rf"\begin{{tabular}}{{l{'r' * len(dataset_cols)}}}",
+        r"\toprule",
+        " & ".join(["", *dataset_cols]) + r" \\",
+    ]
+    section = None
+    for row in table.iter_rows(named=True):
+        if row["Section"] != section:
+            section = row["Section"]
+            lines += [
+                r"\midrule",
+                rf"\multicolumn{{{n_cols}}}{{l}}{{\textit{{{section}}}}} \\",
+            ]
+        cells = [row["Statistic"], *(row[c] for c in dataset_cols)]
+        lines.append(" & ".join(cells) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    if notes:
+        lines.append(r"\par\smallskip\footnotesize " + " ".join(notes))
+    lines.append(r"\end{table}")
+    return "\n".join(lines) + "\n"
+
+
+def parse_args() -> argparse.Namespace:
+    """Parses command-line arguments."""
+    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=list(DEFAULT_DATASETS),
+        choices=sorted(DATASET_LABELS),
+        help="Datasets to summarize, in column order (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=OUTPUT_PATH,
+        help="LaTeX output path (default: tables/dataset_summary.tex).",
+    )
+    return parser.parse_args()
 
 
 def main() -> None:
-    """Main execution entry point."""
+    """Summarizes the selected datasets and writes the LaTeX table."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     logger = logging.getLogger(__name__)
+    args = parse_args()
 
-    metadata_counts = get_metadata_counts()
-    results: List[Dict[str, Any]] = []
+    summaries: dict[str, dict[str, Any]] = {}
+    for key in args.datasets:
+        path = DATA_DIR / f"{key}_embeddings.parquet"
+        if not path.exists():
+            logger.error(f"Missing {path}; skipping {key}.")
+            continue
+        raw_path = RAW_PATHS[key]
+        if raw_path is not None and not raw_path.exists():
+            logger.error(f"Missing raw source {raw_path}; skipping {key}.")
+            continue
+        logger.info(f"Summarizing {key}...")
+        raw_docs = None if raw_path is None else count_rows(raw_path)
+        summaries[key] = summarize_dataset(path, raw_docs, count_covariates(key))
 
-    logger.info(f"Analyzing datasets in {DATA_DIR}...")
+    if not summaries:
+        logger.error("No datasets summarized.")
+        sys.exit(1)
 
-    # Find all embeddings parquet files, omitting the full yelp dataset
-    dataset_files = [
-        f
-        for f in sorted(DATA_DIR.glob("*_embeddings.parquet"))
-        if f.name != "yelp_embeddings.parquet"
-    ]
+    table = build_table(summaries)
+    # ASCII borders: the Windows console code page cannot encode box drawing.
+    with pl.Config(
+        tbl_formatting="ASCII_MARKDOWN",
+        tbl_cell_alignment="RIGHT",
+        tbl_hide_column_data_types=True,
+        tbl_hide_dataframe_shape=True,
+        tbl_cols=-1,
+        tbl_rows=-1,
+        tbl_width_chars=200,
+    ):
+        print(table)
 
-    if not dataset_files:
-        logger.error(f"No suitable *_embeddings.parquet files found in {DATA_DIR}")
-        return
-
-    for file_path in dataset_files:
-        logger.info(f"  Processing {file_path.name}...")
-
-        # Determine metadata count
-        dataset_key = file_path.name.replace("_embeddings.parquet", "")
-        if dataset_key == "yelp_s10000":
-            meta_key = "yelp"
-        else:
-            meta_key = dataset_key
-
-        metadata_count = metadata_counts.get(meta_key, 0)
-
-        try:
-            summary = compute_dataset_summary(file_path, metadata_count)
-            if "Error" in summary:
-                logger.error(f"  {summary['Error']} for {file_path.name}")
-                continue
-            results.append(summary)
-        except Exception as e:
-            logger.error(f"  Error processing {file_path.name}: {e}")
-
-    if not results:
-        logger.warning("No results to display.")
-        return
-
-    df_results = pl.DataFrame(results)
-    logger.info("\n--- Dataset Summary Table ---")
-    print(df_results)
-
-    # Prepare transposed DataFrame for LaTeX
-    # 1. Pivot or transpose: Metrics as rows, Datasets as columns
-    metrics = [c for c in df_results.columns if c != "Dataset"]
-
-    # Transpose using Polars
-    # First, make Dataset the index (not strictly possible in polars, so we transpose manually)
-    df_transposed = (
-        df_results.unpivot(index="Dataset", on=metrics)
-        .pivot(on="Dataset", index="variable", values="value")
-        .rename({"variable": "Metric"})
-    )
-
-    # Rename metrics for a squished LaTeX table
-    metric_rename_map = {
-        "Original Docs": "Orig. Docs",
-        "Dropped Docs": "Dropped",
-        "Total Chunks": "Chunks",
-        "Metadata Cols": "Meta Cols",
-        "Total Tokens": "Tokens",
-        "Total Sentences": "Sentences",
-        "Avg Tokens/Chunk": "Avg Tokens",
-    }
-    df_transposed = df_transposed.with_columns(
-        pl.col("Metric").replace(metric_rename_map)
-    )
-
-    # Rename dataset columns to remove suffixes like _s10000
-    df_transposed = df_transposed.rename(
-        {c: c.replace("_s10000", "") for c in df_transposed.columns if c != "Metric"}
-    )
-    dataset_cols = [c for c in df_transposed.columns if c != "Metric"]
-
-    # Create a professional table using Great Tables
-    gt_table = (
-        GT(df_transposed)
-        .opt_table_font(font="small")
-        .fmt_number(
-            columns=dataset_cols,
-            rows=[0, 1, 2, 3, 4, 5],  # Counts (Orig. Docs to Sents)
-            decimals=0,
-            use_seps=True,
-        )
-        .fmt_number(
-            columns=dataset_cols,
-            rows=[6],  # Avg Tokens
-            decimals=2,
-        )
-        .cols_align(align="center", columns=dataset_cols)
-        .cols_align(align="left", columns="Metric")
-    )
-
-    # Ensure output directory exists
-    OUTPUT_DIR.mkdir(exist_ok=True)
-
-    # Export to LaTeX
-    latex_output_path = OUTPUT_DIR / "dataset_summary.tex"
-    latex_code = gt_table.as_latex()
-
-    # Wrap in \small to ensure it's smaller as requested
-    latex_code = latex_code.replace("\\begin{table}[!t]", "\\begin{table}[!t]\n\\small")
-
-    with open(latex_output_path, "w", encoding="utf-8") as f:
-        f.write(latex_code)
-
-    logger.info(f"\nLaTeX table saved to: {latex_output_path}")
+    notes = [note for key in summaries if (note := sample_note(key))]
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(to_latex(table, notes), encoding="utf-8")
+    logger.info(f"LaTeX table saved to {args.output}")
 
 
 if __name__ == "__main__":

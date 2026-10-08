@@ -62,7 +62,7 @@ This directory contains scripts for data ingestion, cleaning, feature engineerin
 - **[preprocess_datasets.py](../scripts/data_prep/preprocess_datasets.py)**: Performs text preprocessing, cleaning, and optional stemming.
 - **[generate_embeddings.py](../scripts/data_prep/generate_embeddings.py)**: Runs SentenceTransformers to compute document embeddings.
 - **[align_yelp_sample.py](../scripts/data_prep/align_yelp_sample.py)**: Subsamples the Yelp dataset to 10k documents while keeping exact alignment between BERTopic (chunked) and STM (un-chunked) document IDs.
-- **[summarize_datasets.py](../scripts/data_prep/summarize_datasets.py)**: Utility to output statistics (token counts, document numbers) about the processed datasets.
+- **[summarize_datasets.py](../scripts/data_prep/summarize_datasets.py)**: Writes the dataset summary table (`tables/dataset_summary.tex`): document counts, words and sentences per document, and chunk token lengths. Reports the Trump 25k sample as "Trump" by default; `--datasets` selects others.
 - **[sample_yelp_interim.py](../scripts/data_prep/sample_yelp_interim.py)**: Samples 10,000 documents from the interim Yelp parquet data before preprocessing.
 - **[sample_trump.py](../scripts/data_prep/sample_trump.py)**: Samples a fixed subset (default 25,000 documents) of the preprocessed, embedded Trump dataset into `trump_s<n>` files (see [trump_downsampling.md](trump_downsampling.md)).
 - **[generate_stemmed_configs.py](../scripts/data_prep/generate_stemmed_configs.py)**: Generates the `experiments/<dataset>_stemmed/` YAML configurations from the standard ones.
