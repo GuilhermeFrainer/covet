@@ -32,6 +32,7 @@ from src.paper_outputs import (
     _latex_escape,
     _latex_metric,
     paper_label,
+    weight_note,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -365,6 +366,7 @@ def benchmark_table_latex(
         r"Pairwise differences are not tested here. $K$: mean realized number "
         r"of topics."
     )
+    caption += weight_note(sorted(shown), catalog)
     if unranked:
         caption += (
             r" $^\dagger$Not ranked: complete runs on fewer datasets ("

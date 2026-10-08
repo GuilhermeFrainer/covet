@@ -71,7 +71,7 @@ models:
     reduction: append_umap
     clustering: hdbscan
     short_label: "Weighted Append UMAP (w = 0.1)"
-    latex_label: '$\text{\systemshort}_\text{Ap}^{w=0.1}$'
+    latex_label: '$\text{\systemshort}_\text{Ap}^{w}$'
     change: "Distance-balanced Append UMAP with metadata weight w = 0.1."
   append_umap_w020:
     label: BERTopic with weighted Append UMAP (w=0.2).
@@ -163,7 +163,7 @@ models:
     reduction: umap
     clustering: hdbscan
     short_label: "UMAP + HDBSCAN"
-    latex_label: '$\text{BERTopic}_1$'
+    latex_label: '$\text{BERTopic}_\text{H}$'
     change: "Text-only reference; no metadata."
   decoupled_mv_k_means:
     label: UMAP + Decoupled Multi-View K-Means (Cosine Text + Euclidean Metadata)
@@ -326,7 +326,7 @@ models:
     reduction: pca
     clustering: k_means
     short_label: "PCA + K-Means"
-    latex_label: '$\text{BERTopic}_3$'
+    latex_label: '$\text{BERTopic}_\text{K}$'
     change: "Text-only reference; no metadata."
   pca_mv_co_reg_spectral:
     label: PCA + Multi-View Co-Regularized Spectral Clustering
@@ -419,5 +419,5 @@ models:
     reduction: umap
     clustering: spectral_clustering
     short_label: "UMAP + Spectral"
-    latex_label: '$\text{BERTopic}_2$'
+    latex_label: '$\text{BERTopic}_\text{S}$'
     change: "Text-only reference; no metadata."

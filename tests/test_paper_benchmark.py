@@ -11,7 +11,7 @@ from src import paper_benchmark
 from src.comparisons.analysis import BENCHMARK_DATASETS, REQUESTED_TOPICS, SEEDS
 
 CATALOG = {
-    "baseline": {"role": "baseline", "latex_label": r"$\text{BERTopic}_1$"},
+    "baseline": {"role": "baseline", "latex_label": r"$\text{BERTopic}_\text{H}$"},
     "tritopic": {"role": "external_baseline", "short_label": "TriTopic"},
     "append_umap": {
         "role": "ablation",
@@ -113,7 +113,10 @@ def test_benchmark_table_ranks_only_models_complete_everywhere():
     latex = paper_benchmark.benchmark_table_latex(
         table, stats, CATALOG, ("c_npmi",), preliminary=True, note="A note."
     )
-    assert r"$\text{BERTopic}_1$ & $.320$\,{\scriptsize(\textbf{1.0})} & 29" in latex
+    assert (
+        r"$\text{BERTopic}_\text{H}$ & $.320$\,{\scriptsize(\textbf{1.0})} & 29"
+        in latex
+    )
     assert r"$\text{\systemshort}_\text{Ap}$$^\dagger$ & $.115$ &" in latex
     assert r"fewer datasets ($\text{\systemshort}_\text{Ap}$: 4)" in latex
     assert "TriTopic's realized topic count" in latex

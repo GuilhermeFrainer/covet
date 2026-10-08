@@ -7,7 +7,7 @@ from src import paper_noise
 from src.comparisons.analysis import BENCHMARK_DATASETS, REQUESTED_TOPICS, SEEDS
 
 CATALOG = {
-    "baseline": {"latex_label": r"$\text{BERTopic}_1$"},
+    "baseline": {"latex_label": r"$\text{BERTopic}_\text{H}$"},
     "append_umap": {"latex_label": r"$\text{\systemshort}_\text{Ap}$"},
 }
 

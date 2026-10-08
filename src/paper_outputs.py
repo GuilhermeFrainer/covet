@@ -267,6 +267,19 @@ def figure_label(model_id: str, catalog: dict) -> str:
     return label.replace(r"\text{", r"\mathrm{")
 
 
+# Weighted Append variant presented in the tables, and its weight. Its label
+# carries only "w", so captions state the value.
+TABLE_WEIGHTED_APPEND = ("append_umap_w010", 0.1)
+
+
+def weight_note(model_ids, catalog: dict) -> str:
+    """Caption sentence giving the weight of the tables' weighted Append."""
+    model_id, weight = TABLE_WEIGHTED_APPEND
+    if model_id not in set(model_ids):
+        return ""
+    return f" {paper_label(model_id, catalog)} uses $w = {weight:g}$."
+
+
 def _latex_escape(text: str) -> str:
     for char, escaped in (("&", r"\&"), ("%", r"\%"), ("_", r"\_"), ("#", r"\#")):
         text = text.replace(char, escaped)
@@ -366,6 +379,7 @@ def ablation_table_latex(
         r"in the noise cluster, percentage points) and $\Delta$ AMI "
         r"(topic--metadata alignment) are variant minus reference."
     )
+    caption += weight_note(table["Model ID"].to_list(), catalog)
     if any_partial_ami:
         caption += r" $^\dagger$AMI available for fewer datasets."
     if note:

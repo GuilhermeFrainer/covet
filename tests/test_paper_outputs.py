@@ -13,7 +13,7 @@ CATALOG = {
         "family": "hdbscan",
         "label": "UMAP + HDBSCAN",
         "short_label": "UMAP + HDBSCAN",
-        "latex_label": r"$\text{BERTopic}_1$",
+        "latex_label": r"$\text{BERTopic}_\text{H}$",
     },
     "append_umap": {
         "role": "ablation",
@@ -106,7 +106,7 @@ def test_latex_tables_use_paper_notation(comparison):
     assert r"$C_\text{NPMI}$" in main and "$C_V$" in main
     assert "C_v" not in main
     assert r"\textbf{Preliminary.}" in main and main.startswith("% Generated")
-    assert r"\textit{vs.} $\text{BERTopic}_1$" in main
+    assert r"\textit{vs.} $\text{BERTopic}_\text{H}$" in main
     row = r"$\text{\systemshort}_\text{Ap}$ & 2 & $+0.020$\,{\scriptsize(2/0/0)}"
     assert row in main
     stats = paper_outputs.ablation_stats_latex(table, CATALOG, metrics=metrics)
@@ -214,7 +214,9 @@ def test_figure_labels_use_paper_notation():
     assert paper_outputs.figure_label("append_umap", CATALOG) == (
         r"$\mathrm{COVET}_\mathrm{Ap}$"
     )
-    assert paper_outputs.figure_label("baseline", CATALOG) == (r"$\mathrm{BERTopic}_1$")
+    assert paper_outputs.figure_label("baseline", CATALOG) == (
+        r"$\mathrm{BERTopic}_\mathrm{H}$"
+    )
     # No latex_label: the plain name.
     assert paper_outputs.figure_label("append_umap_w010", CATALOG) == "Weighted 0.1"
 
@@ -233,3 +235,11 @@ def test_tradeoff_plots_only_the_given_variants(comparison, tmp_path):
         formats=("png",),
     )
     assert written[0].exists()
+
+
+def test_weight_note_names_the_tables_weighted_append():
+    catalog = {"append_umap_w010": {"latex_label": r"$X^{w}$"}}
+    assert paper_outputs.weight_note(["append_umap_w010"], catalog) == (
+        r" $X^{w}$ uses $w = 0.1$."
+    )
+    assert paper_outputs.weight_note(["baseline"], catalog) == ""

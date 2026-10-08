@@ -18,6 +18,7 @@ from src.paper_outputs import (
     PRELIMINARY_NOTE,
     _latex_escape,
     paper_label,
+    weight_note,
 )
 
 NOISE_MODELS = ("baseline", *HDBSCAN_VARIANTS)
@@ -104,6 +105,7 @@ def noise_table_latex(
     )
     if any("ddagger" in line for line in body):
         caption += r" $^\ddagger$Over fewer datasets."
+    caption += weight_note(coverage["Model ID"].unique().to_list(), catalog)
     if partial:
         caption += r" $^\dagger$Incomplete runs."
     if note:

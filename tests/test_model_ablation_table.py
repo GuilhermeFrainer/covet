@@ -135,10 +135,11 @@ def test_default_latex_fits_one_column(catalog):
     assert "What changes" not in latex
     assert len(rows) == len(generate_model_ablation_rows(catalog))
     assert all(row.count("&") == 2 for row in rows)
-    assert (
-        r"    $\text{BERTopic}_1$ & \raggedright UMAP + HDBSCAN & --- \tabularnewline"
-        in latex
+    baseline_row = (
+        r"    $\text{BERTopic}_\text{H}$ & \raggedright UMAP + HDBSCAN & --- "
+        r"\tabularnewline"
     )
+    assert baseline_row in latex
     assert r"MV Spectral (info\_view = 0)" in latex
     assert latex_escape(r"a_b & 5% {x}") == r"a\_b \& 5\% \{x\}"
 
