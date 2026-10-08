@@ -49,7 +49,7 @@ All outputs come from `uv run python scripts/analysis/make_paper_outputs.py` (Tr
   - [x] Realized topic count column (TriTopic: counted from its exported `topics.json`, since its results record the requested count)
   - [ ] Includes STM automatically once its results are merged (check that its requested K is read from `n_topics`, `nr_topics` or `n_clusters`)
 - [ ] **F1 – Metadata alignment** (main text): dose-response figure, Δ metrics and AMI against w
-- [ ] **T3 – Noise coverage** (appendix): presented HDBSCAN models only; drop "Mean noise docs"
+- [x] **T3 – Noise coverage** (appendix): `tables/noise_coverage.tex`; presented HDBSCAN models × datasets, mean ± SD noise share, plus the mean over datasets
 - [ ] **T4 – Qualitative example**: keep `fed_qualitative_example_v3`
 - [ ] *(optional)* **F2 – Trade-off scatter**: Δ NPMI against Δ IRBO
 - [ ] **Appendix tables**: Diversity and UMass versions of T1/T2

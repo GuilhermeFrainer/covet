@@ -9,6 +9,8 @@ Writes, under --output-dir (default ~/Downloads/covet_paper_outputs):
     tables/benchmark_appendix.tex          T2 for the appendix metrics
     tables/benchmark.csv                   T2 per model
     tables/benchmark_datasets.csv          T2 per model and dataset
+    tables/noise_coverage.tex              T3: noise share per HDBSCAN model and dataset
+    tables/noise_coverage.csv              the same numbers, for inspection
     figures/tradeoff.{pdf,png}             Δ coherence vs Δ IRBO per dataset
     figures/dose_response.{pdf,png}        weighted Append: Δ against metadata weight
 
@@ -30,7 +32,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src import paper_benchmark, paper_outputs  # noqa: E402
+from src import paper_benchmark, paper_noise, paper_outputs  # noqa: E402
 from src.comparisons.analysis import TRUMP_VARIANTS, use_trump_variant  # noqa: E402
 from src.model_catalog import load_catalog  # noqa: E402
 
@@ -164,6 +166,20 @@ def main():
     benchmark.write_csv(tables_dir / "benchmark.csv")
     scores.write_csv(tables_dir / "benchmark_datasets.csv")
     written += [tables_dir / "benchmark.csv", tables_dir / "benchmark_datasets.csv"]
+
+    noise_preliminary = paper_outputs.is_preliminary(results, paper_noise.NOISE_MODELS)
+    flagged.append(noise_preliminary)
+    coverage = paper_noise.noise_coverage(results)
+    written.append(
+        paper_outputs.write_text(
+            tables_dir / "noise_coverage.tex",
+            paper_noise.noise_table_latex(
+                coverage, catalog, preliminary=noise_preliminary, note=note
+            ),
+        )
+    )
+    coverage.write_csv(tables_dir / "noise_coverage.csv")
+    written.append(tables_dir / "noise_coverage.csv")
 
     points = paper_outputs.tradeoff_points(
         datasets, catalog, args.coherence, args.diversity

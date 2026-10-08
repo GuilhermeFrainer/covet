@@ -86,6 +86,31 @@ def _requested_topics(results: pl.DataFrame) -> pl.Expr:
     ).alias("requested")
 
 
+def standard_runs(results: pl.DataFrame) -> pl.DataFrame:
+    """Standard-condition rows with `requested`, `seed` and `merged` columns."""
+    return results.filter(pl.col("condition") == STANDARD_CONDITION).with_columns(
+        _requested_topics(results),
+        pl.col("random_state").cast(pl.Int64, strict=False).alias("seed"),
+        pl.col("source_file").str.contains("_merged").alias("merged"),
+    )
+
+
+def model_runs(standard: pl.DataFrame, model_id: str, dataset: str) -> pl.DataFrame:
+    """One run per seed and requested topic count of a model on a dataset.
+
+    `standard` comes from `standard_runs`. Merged rows win over raw copies.
+    """
+    return (
+        standard.filter(
+            (pl.col("catalog_id") == model_id)
+            & (pl.col("dataset_label") == dataset)
+            & pl.col("requested").is_in(list(REQUESTED_TOPICS))
+        )
+        .sort("merged", descending=True)
+        .unique(subset=["seed", "requested"], keep="first", maintain_order=True)
+    )
+
+
 def dataset_scores(
     results: pl.DataFrame,
     models: list[dict],
@@ -100,25 +125,13 @@ def dataset_scores(
     `realized` maps `run_uid` to the realized topic count of runs in
     `REQUESTED_COUNT_MODELS` (see `realized_topic_counts`).
     """
-    standard = results.filter(pl.col("condition") == STANDARD_CONDITION).with_columns(
-        _requested_topics(results),
-        pl.col("random_state").cast(pl.Int64, strict=False).alias("seed"),
-        pl.col("source_file").str.contains("_merged").alias("merged"),
-    )
+    standard = standard_runs(results)
     rows = []
     for model in models:
         for dataset in BENCHMARK_DATASETS:
             chosen = None
             for source in model["sources"]:
-                runs = (
-                    standard.filter(
-                        (pl.col("catalog_id") == source)
-                        & (pl.col("dataset_label") == dataset)
-                        & pl.col("requested").is_in(list(REQUESTED_TOPICS))
-                    )
-                    .sort("merged", descending=True)
-                    .unique(subset=["seed", "requested"], keep="first")
-                )
+                runs = model_runs(standard, source, dataset)
                 if runs.is_empty():
                     continue
                 candidate = _summarize(
