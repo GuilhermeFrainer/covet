@@ -14,6 +14,7 @@ from src.processing import (
     format_as_yaml,
     process_dataset,
     remove_urls,
+    split_long_sentence,
 )
 
 
@@ -135,6 +136,54 @@ def test_chunk_text_with_overlap(tmp_path):
     assert all(result["id"] == 1)
     assert all(result["metadata"] == "some_value")
     assert all(result["token_count"] <= 30)
+
+
+@pytest.fixture(scope="module")
+def minilm_tokenizer():
+    """The embedder's tokenizer, unmocked."""
+    return AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+
+
+def count_tokens(tokenizer, text):
+    return len(tokenizer.encode(text, add_special_tokens=False))
+
+
+def test_split_long_sentence_fits_and_keeps_words(minilm_tokenizer):
+    """Pieces fit the limit, end on word boundaries and keep every word."""
+    sentence = " ".join(f"inflation{i} expectations" for i in range(200))
+
+    pieces = split_long_sentence(sentence, minilm_tokenizer, max_tokens=50)
+
+    assert len(pieces) > 1
+    assert all(count_tokens(minilm_tokenizer, p) <= 50 for p in pieces)
+    assert " ".join(pieces).split() == sentence.split()
+
+
+def test_split_long_sentence_cuts_inside_an_oversized_word(minilm_tokenizer):
+    """A single word longer than the limit is still split."""
+    word = "".join(f"x{i}" for i in range(300))
+
+    pieces = split_long_sentence(word, minilm_tokenizer, max_tokens=50)
+
+    assert all(count_tokens(minilm_tokenizer, p) <= 50 for p in pieces)
+    assert "".join(pieces) == word
+
+
+def test_chunks_never_exceed_the_limit(minilm_tokenizer):
+    """A run-on sentence longer than the limit no longer yields an oversized chunk."""
+    run_on = " ".join(f"policy{i} rate" for i in range(400))
+    text = f"Short opening. {run_on}. Short closing sentence."
+    df = pl.DataFrame({"id": [7], "text": [text]})
+
+    result = chunk_text_with_overlap(
+        df, "text", minilm_tokenizer, max_tokens=254, overlap_sentences=2
+    )
+
+    assert result.height > 1
+    assert all(result["id"] == 7)
+    assert all(count_tokens(minilm_tokenizer, t) <= 254 for t in result["text"])
+    assert result["token_count"].max() <= 254
+    assert "closing" in result["text"][-1]
 
 
 def test_process_dataset_trump(sample_trump_df, tmp_path):

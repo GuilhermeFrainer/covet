@@ -46,7 +46,9 @@ def main():
         choices=["trump", "yelp", "yelp_s10000", "fed", "anes", "gadarian"],
     )
     parser.add_argument(
-        "--max-tokens", type=int, help="Maximum number of tokens per chunk."
+        "--max-tokens",
+        type=int,
+        help="Maximum tokens per chunk (default: 254, what the embedder reads).",
     )
     parser.add_argument(
         "--include-metadata",

@@ -79,6 +79,16 @@ def process_dataset(
     """
     os.makedirs(batch_dir, exist_ok=True)
 
+    # Batches older than the input belong to a previous preprocessing run;
+    # resuming from them would stitch old embeddings to the new text.
+    input_mtime = Path(input_path).stat().st_mtime
+    stale = [f for f in batch_dir.glob("*.parquet") if f.stat().st_mtime < input_mtime]
+    if stale:
+        raise RuntimeError(
+            f"{len(stale)} batch files in {batch_dir} are older than {input_path}. "
+            "Delete the directory to embed the new input from scratch."
+        )
+
     # Embedding Optimization
     if torch.cuda.is_available():
         device = "cuda"

@@ -1,7 +1,11 @@
+import os
 import tempfile
 from pathlib import Path
 
-from src.embeddings import get_next_batch_index, sort_batch_files
+import polars as pl
+import pytest
+
+from src.embeddings import get_next_batch_index, process_dataset, sort_batch_files
 
 # --- Test Suite ---
 
@@ -101,3 +105,24 @@ def test_sort_batch_files_empty_list():
     Tests that sorting an empty list results in an empty list.
     """
     assert sort_batch_files([]) == []
+
+
+def test_process_dataset_refuses_batches_older_than_input(tmp_path):
+    """Leftover batches from an earlier preprocessing run are not resumed."""
+    batch_dir = tmp_path / "batches"
+    batch_dir.mkdir()
+    old_batch = batch_dir / "batch_0.parquet"
+    old_batch.touch()
+    os.utime(old_batch, (0, 0))
+    input_path = tmp_path / "input.parquet"
+    pl.DataFrame({"clean_text": ["new text"]}).write_parquet(input_path)
+
+    with pytest.raises(RuntimeError, match="older than"):
+        process_dataset(
+            input_path=input_path,
+            batch_dir=batch_dir,
+            final_output_path=tmp_path / "out.parquet",
+            target_columns=["clean_text"],
+            model_name="unused",
+            batch_size=10,
+        )

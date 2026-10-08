@@ -31,6 +31,11 @@ except LookupError:
 
 # Constants
 TOKENIZER_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# SentenceTransformer truncates all-MiniLM-L6-v2 inputs at max_seq_length=256
+# tokens, [CLS] and [SEP] included, although the tokenizer reports
+# model_max_length=512. Chunks must fit the embedder, not the tokenizer.
+EMBEDDING_MAX_SEQ_LENGTH = 256
+MAX_CHUNK_TOKENS = EMBEDDING_MAX_SEQ_LENGTH - 2
 BATCH_SIZE = 10000  # Process 10,000 rows at a time
 ARTIFACTS_TO_REMOVE = {
     "trump": ["covfefe"],
@@ -189,6 +194,34 @@ def format_as_yaml(df: pl.DataFrame, columns: list[str]) -> pl.Series:
     return struct_series.map_elements(lambda x: to_yaml_string(x), return_dtype=pl.Utf8)
 
 
+def split_long_sentence(
+    sentence: str, tokenizer: PreTrainedTokenizer, max_tokens: int
+) -> list[str]:
+    """Splits a sentence longer than max_tokens into pieces that fit.
+
+    Pieces end on word boundaries, so each keeps its own tokenization. A
+    single word longer than max_tokens is cut inside the word.
+    """
+    encoding = tokenizer(
+        sentence, add_special_tokens=False, return_offsets_mapping=True
+    )
+    offsets = encoding["offset_mapping"]
+    word_ids = encoding.word_ids()
+    pieces = []
+    start = 0
+    while start < len(offsets):
+        end = min(start + max_tokens, len(offsets))
+        if end < len(offsets):
+            boundary = end
+            while boundary > start + 1 and word_ids[boundary] == word_ids[boundary - 1]:
+                boundary -= 1
+            if word_ids[boundary] != word_ids[boundary - 1]:
+                end = boundary
+        pieces.append(sentence[offsets[start][0] : offsets[end - 1][1]])
+        start = end
+    return pieces
+
+
 def chunk_text_with_overlap(
     df: pl.DataFrame,
     text_column: str,
@@ -196,7 +229,11 @@ def chunk_text_with_overlap(
     max_tokens: int,
     overlap_sentences: int = 1,
 ) -> pl.DataFrame:
-    """Chunks text into smaller pieces only if it exceeds a token limit."""
+    """Chunks text into smaller pieces only if it exceeds a token limit.
+
+    Sentences longer than max_tokens are split first, so no chunk exceeds
+    the limit. Consecutive chunks share up to overlap_sentences sentences.
+    """
     new_rows = []
     rows_to_chunk = 0
 
@@ -216,7 +253,19 @@ def chunk_text_with_overlap(
             continue
 
         rows_to_chunk += 1
-        sentences = nltk.sent_tokenize(original_text)
+        sentences = []
+        sentence_tokens = []
+        for sentence in nltk.sent_tokenize(original_text):
+            n_tokens = len(tokenizer.encode(sentence, add_special_tokens=False))
+            if n_tokens <= max_tokens:
+                sentences.append(sentence)
+                sentence_tokens.append(n_tokens)
+                continue
+            for piece in split_long_sentence(sentence, tokenizer, max_tokens):
+                sentences.append(piece)
+                sentence_tokens.append(
+                    len(tokenizer.encode(piece, add_special_tokens=False))
+                )
         if not sentences:
             continue
 
@@ -227,13 +276,12 @@ def chunk_text_with_overlap(
             end_pos = current_pos
 
             while end_pos < len(sentences):
-                sent = sentences[end_pos]
-                sent_tokens = len(tokenizer.encode(sent, add_special_tokens=False))
+                sent_tokens = sentence_tokens[end_pos]
 
                 if chunk_tokens + sent_tokens > max_tokens and chunk_sentences:
                     break
 
-                chunk_sentences.append(sent)
+                chunk_sentences.append(sentences[end_pos])
                 chunk_tokens += sent_tokens
                 end_pos += 1
 
@@ -409,7 +457,12 @@ def process_dataset(
 
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     if max_tokens is None:
-        max_tokens = tokenizer.model_max_length
+        max_tokens = MAX_CHUNK_TOKENS
+    elif max_tokens > MAX_CHUNK_TOKENS:
+        logging.warning(
+            f"max_tokens={max_tokens} exceeds the {MAX_CHUNK_TOKENS} content tokens "
+            "the embedder reads; longer chunks are truncated when embedded."
+        )
 
     with tempfile.TemporaryDirectory() as tmpdir:
         batch_dir = Path(tmpdir)
