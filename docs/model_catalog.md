@@ -39,7 +39,11 @@ experiment's `model.id`. Every entry explicitly declares:
 - Optional `aliases`: historical model IDs with exactly the same identity.
 - Optional `short_label`: plain-text paper name used by the model ablation table.
 - Optional `latex_label`: the model's LaTeX symbol, written as raw LaTeX
-  (e.g. `'$\text{\systemshort}_1$'`). Existing symbols must match the results
+  (e.g. `'$\text{\systemshort}_\text{CR}$'`). COVET variants use a one- or
+  two-letter subscript for their technique (`Ap` Append, `Al` Aligned UMAP,
+  `MH` MV-HDBSCAN, `FS` Feature-Stacking, `CR` Co-Reg, `CT` co-training MV
+  Spectral); weighted Append adds the weight as a superscript
+  (`\text{Ap}^{w=0.1}`). Existing symbols must match the results
   tables in [`src/make_table.py`](../src/make_table.py); a test enforces this
   for `MODEL_LATEX_MAP`.
 - Optional `change`: one plain-text sentence describing what differs from

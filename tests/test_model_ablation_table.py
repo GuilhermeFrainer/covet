@@ -50,13 +50,16 @@ def test_latex_labels_match_results_tables(catalog):
     assert len(labels) == len(set(labels))
 
 
-def test_default_system_labels_are_numbered_without_gaps(catalog):
-    labels = " ".join(row["label"] for row in generate_model_ablation_rows(catalog))
-    numbers = {int(n) for n in re.findall(r"\\systemshort\}_(\d+)", labels)}
-    assert numbers == set(range(1, 9))
-    assert catalog["mv_hdbscan"]["latex_label"] == r"$\text{\systemshort}_7$"
+def test_default_system_labels_use_technique_subscripts(catalog):
+    labels = [row["label"] for row in generate_model_ablation_rows(catalog)]
+    codes = [re.search(r"\\systemshort\}_\\text\{([^}]+)\}", label) for label in labels]
+    system_codes = [code.group(1) for code in codes if code]
+    assert len(system_codes) == len(set(system_codes))
+    assert not re.search(r"\\systemshort\}_\d", " ".join(labels))
+    assert catalog["append_umap"]["latex_label"] == r"$\text{\systemshort}_\text{Ap}$"
+    assert catalog["mv_hdbscan"]["latex_label"] == r"$\text{\systemshort}_\text{MH}$"
     assert catalog["feature_stacking_hdbscan"]["latex_label"] == (
-        r"$\text{\systemshort}_8$"
+        r"$\text{\systemshort}_\text{FS}$"
     )
 
 

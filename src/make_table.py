@@ -152,18 +152,18 @@ def generate_best_models_latex_table(
 
     # Model renaming for LaTeX
     MODEL_RENAME_MAP = {
-        "append_umap": "Naive",
-        "mv_co_reg_spectral": "$\\text{\\systemshort}_1$",
-        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_1\\text{-info0}$",
+        "append_umap": "$\\text{\\systemshort}_\\text{Ap}$",
+        "mv_co_reg_spectral": "$\\text{\\systemshort}_\\text{CR}$",
+        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_\\text{CR-info0}$",
         "baseline": "$\\text{BERTopic}_1$",
         "umap_spectral": "$\\text{BERTopic}_2$",
-        "mv_spectral": "$\\text{\\systemshort}_2$",
-        "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
-        "aligned_umap": "$\\text{\\systemshort}_3$",
-        "mv_hdbscan": "$\\text{\\systemshort}_7$",
-        "multi_view_hdbscan": "$\\text{\\systemshort}_7$",
-        "feature_stacking_hdbscan": "$\\text{\\systemshort}_8$",
-        "stacked_hdbscan": "$\\text{\\systemshort}_8$",
+        "mv_spectral": "$\\text{\\systemshort}_\\text{CT}$",
+        "mv_spectral_info0": "$\\text{\\systemshort}_\\text{CT-info0}$",
+        "aligned_umap": "$\\text{\\systemshort}_\\text{Al}$",
+        "mv_hdbscan": "$\\text{\\systemshort}_\\text{MH}$",
+        "multi_view_hdbscan": "$\\text{\\systemshort}_\\text{MH}$",
+        "feature_stacking_hdbscan": "$\\text{\\systemshort}_\\text{FS}$",
+        "stacked_hdbscan": "$\\text{\\systemshort}_\\text{FS}$",
         "stm": "STM",
     }
 
@@ -414,18 +414,18 @@ def generate_stopword_impact_latex_table(
         return ""
 
     MODEL_RENAME_MAP = {
-        "append_umap": "Naive",
-        "mv_co_reg_spectral": "$\\text{\\systemshort}_1$",
-        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_1\\text{-info0}$",
+        "append_umap": "$\\text{\\systemshort}_\\text{Ap}$",
+        "mv_co_reg_spectral": "$\\text{\\systemshort}_\\text{CR}$",
+        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_\\text{CR-info0}$",
         "baseline": "$\\text{BERTopic}_1$",
         "umap_spectral": "$\\text{BERTopic}_2$",
-        "mv_spectral": "$\\text{\\systemshort}_2$",
-        "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
-        "aligned_umap": "$\\text{\\systemshort}_3$",
-        "mv_hdbscan": "$\\text{\\systemshort}_7$",
-        "multi_view_hdbscan": "$\\text{\\systemshort}_7$",
-        "feature_stacking_hdbscan": "$\\text{\\systemshort}_8$",
-        "stacked_hdbscan": "$\\text{\\systemshort}_8$",
+        "mv_spectral": "$\\text{\\systemshort}_\\text{CT}$",
+        "mv_spectral_info0": "$\\text{\\systemshort}_\\text{CT-info0}$",
+        "aligned_umap": "$\\text{\\systemshort}_\\text{Al}$",
+        "mv_hdbscan": "$\\text{\\systemshort}_\\text{MH}$",
+        "multi_view_hdbscan": "$\\text{\\systemshort}_\\text{MH}$",
+        "feature_stacking_hdbscan": "$\\text{\\systemshort}_\\text{FS}$",
+        "stacked_hdbscan": "$\\text{\\systemshort}_\\text{FS}$",
         "stm": "STM",
     }
 
@@ -666,18 +666,18 @@ def generate_demsar_delta_latex_table(
         return ""
 
     MODEL_RENAME_MAP = {
-        "append_umap": "Naive",
-        "mv_co_reg_spectral": "$\\text{\\systemshort}_1$",
-        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_1\\text{-info0}$",
+        "append_umap": "$\\text{\\systemshort}_\\text{Ap}$",
+        "mv_co_reg_spectral": "$\\text{\\systemshort}_\\text{CR}$",
+        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_\\text{CR-info0}$",
         "baseline": "$\\text{BERTopic}_1$",
         "umap_spectral": "$\\text{BERTopic}_2$",
-        "mv_spectral": "$\\text{\\systemshort}_2$",
-        "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
-        "aligned_umap": "$\\text{\\systemshort}_3$",
-        "mv_hdbscan": "$\\text{\\systemshort}_7$",
-        "multi_view_hdbscan": "$\\text{\\systemshort}_7$",
-        "feature_stacking_hdbscan": "$\\text{\\systemshort}_8$",
-        "stacked_hdbscan": "$\\text{\\systemshort}_8$",
+        "mv_spectral": "$\\text{\\systemshort}_\\text{CT}$",
+        "mv_spectral_info0": "$\\text{\\systemshort}_\\text{CT-info0}$",
+        "aligned_umap": "$\\text{\\systemshort}_\\text{Al}$",
+        "mv_hdbscan": "$\\text{\\systemshort}_\\text{MH}$",
+        "multi_view_hdbscan": "$\\text{\\systemshort}_\\text{MH}$",
+        "feature_stacking_hdbscan": "$\\text{\\systemshort}_\\text{FS}$",
+        "stacked_hdbscan": "$\\text{\\systemshort}_\\text{FS}$",
         "stm": "STM",
     }
 
@@ -978,18 +978,18 @@ def generate_demsar_all_vs_all_latex_table(
         return ""
 
     MODEL_RENAME_MAP = {
-        "append_umap": "Naive",
-        "mv_co_reg_spectral": "$\\text{\\systemshort}_1$",
-        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_1\\text{-info0}$",
+        "append_umap": "$\\text{\\systemshort}_\\text{Ap}$",
+        "mv_co_reg_spectral": "$\\text{\\systemshort}_\\text{CR}$",
+        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_\\text{CR-info0}$",
         "baseline": "$\\text{BERTopic}_1$",
         "umap_spectral": "$\\text{BERTopic}_2$",
-        "mv_spectral": "$\\text{\\systemshort}_2$",
-        "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
-        "aligned_umap": "$\\text{\\systemshort}_3$",
-        "mv_hdbscan": "$\\text{\\systemshort}_7$",
-        "multi_view_hdbscan": "$\\text{\\systemshort}_7$",
-        "feature_stacking_hdbscan": "$\\text{\\systemshort}_8$",
-        "stacked_hdbscan": "$\\text{\\systemshort}_8$",
+        "mv_spectral": "$\\text{\\systemshort}_\\text{CT}$",
+        "mv_spectral_info0": "$\\text{\\systemshort}_\\text{CT-info0}$",
+        "aligned_umap": "$\\text{\\systemshort}_\\text{Al}$",
+        "mv_hdbscan": "$\\text{\\systemshort}_\\text{MH}$",
+        "multi_view_hdbscan": "$\\text{\\systemshort}_\\text{MH}$",
+        "feature_stacking_hdbscan": "$\\text{\\systemshort}_\\text{FS}$",
+        "stacked_hdbscan": "$\\text{\\systemshort}_\\text{FS}$",
         "stm": "STM",
     }
 
@@ -1099,14 +1099,14 @@ def generate_pairwise_delta_latex_matrix(
         return ""
 
     MODEL_RENAME_MAP = {
-        "append_umap": "Naive",
-        "mv_co_reg_spectral": "$\\text{\\systemshort}_1$",
-        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_1\\text{-info0}$",
+        "append_umap": "$\\text{\\systemshort}_\\text{Ap}$",
+        "mv_co_reg_spectral": "$\\text{\\systemshort}_\\text{CR}$",
+        "mv_co_reg_spectral_info0": "$\\text{\\systemshort}_\\text{CR-info0}$",
         "baseline": "$\\text{BERTopic}_1$",
         "umap_spectral": "$\\text{BERTopic}_2$",
-        "mv_spectral": "$\\text{\\systemshort}_2$",
-        "mv_spectral_info0": "$\\text{\\systemshort}_2\\text{-info0}$",
-        "aligned_umap": "$\\text{\\systemshort}_3$",
+        "mv_spectral": "$\\text{\\systemshort}_\\text{CT}$",
+        "mv_spectral_info0": "$\\text{\\systemshort}_\\text{CT-info0}$",
+        "aligned_umap": "$\\text{\\systemshort}_\\text{Al}$",
         "stm": "STM",
     }
 
@@ -1235,14 +1235,14 @@ def generate_demsar_all_vs_all_report(
 # ==============================================================================
 
 MODEL_LATEX_MAP = {
-    "append_umap": "Naive",
-    "mv_co_reg_spectral": r"$\text{\systemshort}_1$",
-    "mv_co_reg_spectral_info0": r"$\text{\systemshort}_1\text{-info0}$",
+    "append_umap": r"$\text{\systemshort}_\text{Ap}$",
+    "mv_co_reg_spectral": r"$\text{\systemshort}_\text{CR}$",
+    "mv_co_reg_spectral_info0": r"$\text{\systemshort}_\text{CR-info0}$",
     "baseline": r"$\text{BERTopic}_1$",
     "umap_spectral": r"$\text{BERTopic}_2$",
-    "mv_spectral": r"$\text{\systemshort}_2$",
-    "mv_spectral_info0": r"$\text{\systemshort}_2\text{-info0}$",
-    "aligned_umap": r"$\text{\systemshort}_3$",
+    "mv_spectral": r"$\text{\systemshort}_\text{CT}$",
+    "mv_spectral_info0": r"$\text{\systemshort}_\text{CT-info0}$",
+    "aligned_umap": r"$\text{\systemshort}_\text{Al}$",
     "stm": "STM",
 }
 
