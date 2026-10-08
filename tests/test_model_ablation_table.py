@@ -181,3 +181,12 @@ def test_cli_writes_latex(tmp_path, catalog):
         include_changes=True,
     )
     assert output.read_text(encoding="utf-8") == expected + "\n"
+
+
+def test_explicit_model_ids_select_and_order_rows(catalog):
+    ids = ["baseline", "mv_hdbscan", "append_umap_w010", "umap_spectral", "stm"]
+    rows = generate_model_ablation_rows(catalog, model_ids=ids)
+    assert [row["model_id"] for row in rows] == ids
+    latex = generate_model_ablation_latex_table(catalog, model_ids=ids)
+    assert "STM is an external baseline." in latex
+    assert "PCA" not in latex and r"\systemshort}_\text{CT" not in latex

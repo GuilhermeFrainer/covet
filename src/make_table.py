@@ -1824,13 +1824,12 @@ def _component_change(entry: dict, baseline: dict) -> str:
     return "Changes " + " and ".join(changes) + "."
 
 
-
-
 def generate_model_ablation_rows(
     models: dict,
     include_secondary: bool = False,
     include_external: bool = False,
     include_weighted_append: bool = False,
+    model_ids=None,
 ) -> list[dict]:
     """Selects catalog models and pairs each ablation with its reference baseline.
 
@@ -1842,6 +1841,9 @@ def generate_model_ablation_rows(
         include_external: If True, appends external baselines (STM, TriTopic).
         include_weighted_append: If True, includes the weighted Append UMAP
             variants (`append_umap_w*`).
+        model_ids: If given, exactly these models, whatever their priority or
+            family, kept in this order within each family; the include_*
+            flags are then ignored.
 
     Returns:
         A list of row dictionaries grouped by family with each reference baseline
@@ -1850,16 +1852,26 @@ def generate_model_ablation_rows(
     """
     rows = []
     for family in ABLATION_FAMILY_ORDER:
-        if family == "external" and not include_external:
-            continue
-        selected = [
-            (model_id, entry)
-            for model_id, entry in models.items()
-            if entry["family"] == family
-            and (include_secondary or entry["priority"] == "primary")
-            and (include_weighted_append or not WEIGHTED_APPEND_PATTERN.match(model_id))
-        ]
-        selected.sort(key=lambda item: _ablation_sort_key(item[1]))
+        if model_ids is not None:
+            selected = [
+                (model_id, models[model_id])
+                for model_id in model_ids
+                if models[model_id]["family"] == family
+            ]
+        else:
+            if family == "external" and not include_external:
+                continue
+            selected = [
+                (model_id, entry)
+                for model_id, entry in models.items()
+                if entry["family"] == family
+                and (include_secondary or entry["priority"] == "primary")
+                and (
+                    include_weighted_append
+                    or not WEIGHTED_APPEND_PATTERN.match(model_id)
+                )
+            ]
+            selected.sort(key=lambda item: _ablation_sort_key(item[1]))
         for model_id, entry in selected:
             baseline = models.get(entry["baseline_id"])
             if baseline is not None:
@@ -1868,14 +1880,16 @@ def generate_model_ablation_rows(
                 change = entry.get("change") or "External baseline."
             else:
                 change = entry.get("change") or "Reference baseline."
-            rows.append({
-                "family": family,
-                "model_id": model_id,
-                "label": _catalog_latex_label(entry),
-                "model": _catalog_label(entry),
-                "ablates_on": _catalog_latex_label(baseline) if baseline else None,
-                "change": change,
-            })
+            rows.append(
+                {
+                    "family": family,
+                    "model_id": model_id,
+                    "label": _catalog_latex_label(entry),
+                    "model": _catalog_label(entry),
+                    "ablates_on": _catalog_latex_label(baseline) if baseline else None,
+                    "change": change,
+                }
+            )
     return rows
 
 
@@ -1885,6 +1899,7 @@ def generate_model_ablation_latex_table(
     include_external: bool = False,
     include_weighted_append: bool = False,
     include_changes: bool = False,
+    model_ids=None,
 ) -> str:
     """Generates a LaTeX table of proposed models and the baselines they ablate.
 
@@ -1900,15 +1915,40 @@ def generate_model_ablation_latex_table(
         include_weighted_append: If True, includes the weighted Append UMAP
             variants.
         include_changes: If True, adds the What changes column.
+        model_ids: If given, exactly these models (see
+            `generate_model_ablation_rows`).
 
     Returns:
         A LaTeX table string requiring the booktabs, tabularx, and amsmath
         packages and the systemshort macro.
     """
     rows = generate_model_ablation_rows(
-        models, include_secondary, include_external, include_weighted_append
+        models,
+        include_secondary,
+        include_external,
+        include_weighted_append,
+        model_ids=model_ids,
     )
     environment = "table*" if include_changes else "table"
+    caption = (
+        r"Proposed \systemshort{} variants and the reference baseline each one "
+        r"ablates."
+    )
+    external = [
+        latex_escape(row["model"]) for row in rows if row["family"] == "external"
+    ]
+    if external:
+        names = (
+            external[0]
+            if len(external) == 1
+            else ", ".join(external[:-1]) + " and " + external[-1]
+        )
+        verb = (
+            "is an external baseline"
+            if len(external) == 1
+            else "are external baselines"
+        )
+        caption += f" {names} {verb}."
     # Labels are unbreakable math, so their columns take their natural width.
     if include_changes:
         columns = r"@{}lp{0.22\linewidth}lX@{}"
@@ -1921,8 +1961,7 @@ def generate_model_ablation_latex_table(
         r"\centering",
         r"\small",
         r"\setlength{\tabcolsep}{4pt}",
-        r"\caption{Proposed \systemshort{} variants and the reference baseline "
-        r"each one ablates.}",
+        rf"\caption{{{caption}}}",
         r"\label{tab:model_ablations}",
         rf"\begin{{tabularx}}{{\linewidth}}{{{columns}}}",
         r"    \toprule",

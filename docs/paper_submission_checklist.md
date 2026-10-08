@@ -51,7 +51,8 @@ All outputs come from `uv run python scripts/analysis/make_paper_outputs.py` (Tr
 - [ ] **F1 – Metadata alignment** (main text): dose-response figure, Δ metrics and AMI against w
 - [x] **T3 – Noise coverage** (appendix): `tables/noise_coverage.tex`; presented HDBSCAN models × datasets, mean ± SD noise share, plus the mean over datasets
 - [ ] **T4 – Qualitative example**: keep `fed_qualitative_example_v3`
-- [ ] *(optional)* **F2 – Trade-off scatter**: Δ NPMI against Δ IRBO
+- [x] **Proposed-models table**: `tables/model_ablations.tex`, generated with the other outputs; only the presented models (T1 variants and their references, then TriTopic and STM)
+- [x] *(optional)* **F2 – Trade-off scatter**: Δ NPMI against Δ IRBO, HDBSCAN variants, paper labels
 - [ ] **Appendix tables**: Diversity and UMass versions of T1/T2
 - [ ] Fill the AMI gaps: re-run Fed Aligned UMAP and Fed Append UMAP (a backfill is not possible; see [Missing runs](#missing-runs)). Until then their ΔAMI in T1 covers 4 datasets (marked †).
 - [ ] Tests, ruff, and a pdflatex compile of every table

@@ -276,7 +276,7 @@ models:
     baseline_id: umap_spectral
     reduction: umap
     clustering: multi_view_spectral_clustering
-    short_label: "MV Spectral"
+    short_label: "Co-Train. MV Spectral"
     latex_label: '$\text{\systemshort}_\text{CT}$'
     change: "Replaces single-view spectral clustering with multi-view spectral clustering over the text and metadata views; affinity construction also differs."
   mv_spectral_info0:
