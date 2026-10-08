@@ -130,11 +130,13 @@ Coverage of the standard results on 2026-10-08 (15 runs = 3 seeds × 5 topic cou
 - [ ] **STM**: all five datasets (results are on the cluster; merge them)
 - [ ] **COVET$_\text{Ap}^{w}$ (weighted Append sweep)**
   - [ ] Fed: merge the 15 `append_umap_w000` and 7 `append_umap_w005` raw files; run the rest of w005 (8) and w010, w020, w030, w050 (15 each)
+    - These raw files predate the evaluation fix: after merging, run `recompute_topic_metrics.py --datasets fed`. Until then they mark the dose-response figure preliminary.
   - [ ] Trump-25k: w000, w005, w010, w020, w030, w050 (15 each); w010 alone is enough for T1
 - [ ] **COVET$_\text{MH}$**: Trump-25k (15)
 - [ ] **COVET$_\text{FS}$**: Trump-25k (15)
 - [ ] **COVET$_\text{CT}$ (MV Spectral)**: Yelp (15)
 - [ ] **AMI backfill** (no training, a backfill run): Fed `aligned_umap` and `append_umap`
+- [x] Trump-25k metrics recomputed under the current evaluation protocol (2026-10-08; its runs came from revision `17fde45`, before the fix). Original archived as `results/archive/trump_s25000_standard_merged_pre_recompute_20261008_151449.zip`.
 - [ ] *(later)* FED and Yelp: rebuild and re-run every model after the chunking fix (`29a6e6f`)
 
 ---

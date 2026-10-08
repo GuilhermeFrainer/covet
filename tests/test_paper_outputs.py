@@ -119,6 +119,10 @@ def test_preliminary_until_every_row_uses_the_current_protocol():
     assert not paper_outputs.is_preliminary(_results(EVALUATION_PROTOCOL))
     mixed = pl.concat([_results(EVALUATION_PROTOCOL), _results().head(1)])
     assert paper_outputs.is_preliminary(mixed)
+    # The stale row is a baseline run: it flags outputs using the baseline only.
+    assert mixed.tail(1)["catalog_id"].item() == "baseline"
+    assert paper_outputs.is_preliminary(mixed, ["baseline", "append_umap"])
+    assert not paper_outputs.is_preliminary(mixed, ["append_umap_w010"])
 
 
 def test_dose_response_maps_weights_and_noise_share():

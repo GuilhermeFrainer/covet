@@ -109,9 +109,15 @@ def load_results(project_root: Path) -> pl.DataFrame:
     return fill_run_alignment(results, alignment)
 
 
-def is_preliminary(results: pl.DataFrame) -> bool:
-    """True when any standard-condition row predates the current protocol."""
+def is_preliminary(results: pl.DataFrame, model_ids=None) -> bool:
+    """True when any standard-condition row predates the current protocol.
+
+    With `model_ids`, only rows of those catalog models count, so an output
+    is flagged only by the results it actually uses.
+    """
     standard = results.filter(pl.col("condition") == STANDARD_CONDITION)
+    if model_ids is not None:
+        standard = standard.filter(pl.col("catalog_id").is_in(list(model_ids)))
     if "evaluation_protocol" not in standard.columns:
         return True
     return (

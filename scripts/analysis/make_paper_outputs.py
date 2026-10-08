@@ -8,7 +8,7 @@ Writes, under --output-dir (default ~/Downloads/covet_paper_outputs):
     figures/tradeoff.{pdf,png}             Δ coherence vs Δ IRBO per dataset
     figures/dose_response.{pdf,png}        weighted Append: Δ against metadata weight
 
-Outputs are marked preliminary while any result was scored with an older
+Each output is marked preliminary while any result it uses was scored with an older
 evaluation protocol (see docs/paper_results_plan.md).
 
 Usage:
@@ -54,7 +54,6 @@ def main():
 
     catalog = load_catalog()
     results = use_trump_variant(paper_outputs.load_results(PROJECT_ROOT), args.trump)
-    preliminary = paper_outputs.is_preliminary(results)
     documents = paper_outputs.documents_per_dataset(results)
     output_dir = (
         args.output_dir
@@ -68,6 +67,12 @@ def main():
         else f"Trump results use the {TRUMP_VARIANTS[args.trump]}."
     )
 
+    pairwise_models = {
+        *paper_outputs.PAIRWISE_VARIANTS,
+        *(catalog[v]["baseline_id"] for v in paper_outputs.PAIRWISE_VARIANTS),
+    }
+    preliminary = paper_outputs.is_preliminary(results, pairwise_models)
+    flagged = [preliminary]
     datasets, summary = paper_outputs.compare(
         results, catalog, paper_outputs.PAIRWISE_VARIANTS
     )
@@ -122,17 +127,21 @@ def main():
     )
 
     weighted = [model for model, _ in paper_outputs.WEIGHTED_APPEND]
+    weighted_preliminary = paper_outputs.is_preliminary(
+        results, [*weighted, "baseline"]
+    )
+    flagged.append(weighted_preliminary)
     weighted_datasets, _ = paper_outputs.compare(results, catalog, weighted)
     curve = paper_outputs.dose_response(weighted_datasets, documents)
     written += paper_outputs.plot_dose_response(
         curve,
         figures_dir / "dose_response",
-        preliminary=preliminary,
+        preliminary=weighted_preliminary,
         formats=args.formats,
     )
 
-    if preliminary:
-        print(f"NOTE: {paper_outputs.PRELIMINARY_NOTE}")
+    if any(flagged):
+        print(f"NOTE (some outputs): {paper_outputs.PRELIMINARY_NOTE}")
     for path in written:
         print(f"Wrote {path}")
 
