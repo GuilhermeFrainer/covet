@@ -56,7 +56,7 @@ All outputs come from `uv run python scripts/analysis/make_paper_outputs.py` (Tr
 - [ ] **Appendix tables**: Diversity and UMass versions of T1/T2
 - [ ] Fill the AMI gaps: re-run Fed Aligned UMAP and Fed Append UMAP (a backfill is not possible; see [Missing runs](#missing-runs)). Until then their ΔAMI in T1 covers 4 datasets (marked †).
 - [ ] Tests, ruff, and a pdflatex compile of every table
-- [ ] `\input` the outputs into the tex; remove `combined_avg5`, `demsar_delta_yelp_no_stopword_removal` and `all_datasets_demsar_all_vs_all`
+- [x] `\input` the outputs into the tex; remove `combined_avg5`, `demsar_delta_yelp_no_stopword_removal`, `all_datasets_demsar_all_vs_all` and `hdbscan_noise_coverage` (stale tables removed by the author, 2026-10-08)
 
 ---
 
