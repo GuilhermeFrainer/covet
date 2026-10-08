@@ -77,17 +77,13 @@ def test_active_standard_configs_parity():
                     if dr_type == "append_umap" and "metadata_weight" in dr_params
                     else "cosine"
                 )
-                assert (
-                    dr_params.get("metric") == expected_metric
-                ), f"{f}: metric != {expected_metric}"
-                assert (
-                    dr_params.get("low_memory") is False
-                ), f"{f}: low_memory != False"
+                assert dr_params.get("metric") == expected_metric, (
+                    f"{f}: metric != {expected_metric}"
+                )
+                assert dr_params.get("low_memory") is False, f"{f}: low_memory != False"
 
             elif dr_type == "pca":
-                assert (
-                    dr_params.get("n_components") == 5
-                ), f"{f}: PCA n_components != 5"
+                assert dr_params.get("n_components") == 5, f"{f}: PCA n_components != 5"
 
         cl = model_cfg.get("clustering")
         if cl and cl.get("type") == "hdbscan":
@@ -109,9 +105,9 @@ def test_active_standard_configs_parity():
                 f"{f}: expected min_cluster_size={expected_min_size}, "
                 f"got {actual_min_size}"
             )
-            assert (
-                cl_params.get("prediction_data") is True
-            ), f"{f}: prediction_data != True"
+            assert cl_params.get("prediction_data") is True, (
+                f"{f}: prediction_data != True"
+            )
 
 
 def test_pca_omitted_components_fallback():
