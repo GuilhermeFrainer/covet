@@ -10,17 +10,22 @@ from src.evaluation import EVALUATION_PROTOCOL
 CATALOG = {
     "baseline": {
         "role": "baseline",
+        "family": "hdbscan",
         "label": "UMAP + HDBSCAN",
         "short_label": "UMAP + HDBSCAN",
+        "latex_label": r"$\text{BERTopic}_1$",
     },
     "append_umap": {
         "role": "ablation",
+        "family": "hdbscan",
         "label": "Append",
         "short_label": "Append UMAP",
+        "latex_label": r"$\text{\systemshort}_\text{Ap}$",
         "baseline_id": "baseline",
     },
     "append_umap_w010": {
         "role": "ablation",
+        "family": "hdbscan",
         "label": "Weighted 0.1",
         "baseline_id": "baseline",
     },
@@ -53,6 +58,7 @@ def _results(protocol=None) -> pl.DataFrame:
                             "n_topics": topics,
                             "outliers": outliers,
                             "n_observations": DOCUMENTS[dataset],
+                            "meta_ami_mean": 0.05 + bonus * 10,
                             "evaluation_protocol": protocol,
                         }
                     )
@@ -83,6 +89,9 @@ def test_ablation_table_reports_deltas_topics_and_noise(comparison):
     # 40 noise documents fewer: 20 pp of 200 (anes) and 10 pp of 400 (fed).
     assert row["Δ noise"] == pytest.approx(-15)
     assert row["Datasets"] == 2
+    assert row["Reference ID"] == "baseline" and row["Family"] == "hdbscan"
+    assert row["Δ AMI"] == pytest.approx(0.2)
+    assert row["AMI datasets"] == 2
 
 
 def test_latex_tables_use_paper_notation(comparison):
@@ -97,8 +106,10 @@ def test_latex_tables_use_paper_notation(comparison):
     assert r"$C_\text{NPMI}$" in main and "$C_V$" in main
     assert "C_v" not in main
     assert r"\textbf{Preliminary.}" in main and main.startswith("% Generated")
-    assert r"$+0.020$\,{\scriptsize(2/0/0)}" in main
-    stats = paper_outputs.ablation_stats_latex(table, metrics=metrics)
+    assert r"\textit{vs.} $\text{BERTopic}_1$" in main
+    row = r"$\text{\systemshort}_\text{Ap}$ & 2 & $+0.020$\,{\scriptsize(2/0/0)}"
+    assert row in main
+    stats = paper_outputs.ablation_stats_latex(table, CATALOG, metrics=metrics)
     assert "With 2 datasets the smallest attainable two-sided $p$ is $0.5$" in stats
     assert "Preliminary" not in stats
 
@@ -164,6 +175,22 @@ def test_load_results_annotates_condition_and_dataset(tmp_path):
     assert row["catalog_id"] == "baseline"
 
 
+def test_partial_ami_is_marked_and_spectral_noise_omitted(comparison):
+    datasets, summary = comparison
+    table = paper_outputs.ablation_table(
+        datasets, summary, CATALOG, variants=("append_umap",), metrics=("c_npmi",)
+    ).with_columns(pl.lit(1).alias("AMI datasets"))
+    main = paper_outputs.ablation_table_latex(table, CATALOG, metrics=("c_npmi",))
+    assert r"$+0.20$$^\dagger$" in main
+    assert "AMI available for fewer datasets" in main
+    spectral = table.with_columns(pl.lit("spectral").alias("Family"))
+    lines = paper_outputs.ablation_table_latex(
+        spectral, CATALOG, metrics=("c_npmi",)
+    ).splitlines()
+    row = next(line for line in lines if line.startswith(r"$\text{\systemshort}"))
+    assert row.split(" & ")[-2] == "--"
+
+
 def test_caption_note_names_the_trump_variant(comparison):
     datasets, summary = comparison
     table = paper_outputs.ablation_table(
@@ -173,5 +200,7 @@ def test_caption_note_names_the_trump_variant(comparison):
     main = paper_outputs.ablation_table_latex(
         table, CATALOG, metrics=("c_npmi",), note=note
     )
-    stats = paper_outputs.ablation_stats_latex(table, metrics=("c_npmi",), note=note)
+    stats = paper_outputs.ablation_stats_latex(
+        table, CATALOG, metrics=("c_npmi",), note=note
+    )
     assert note in main and note in stats

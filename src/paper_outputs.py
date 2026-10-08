@@ -25,13 +25,23 @@ from src.metadata_alignment import fill_run_alignment, load_covariate_alignment
 from src.model_catalog import annotate_models, load_catalog
 from src.results_analysis import canonical_dataset_expr
 
-HDBSCAN_VARIANTS = (
+# Planned pairwise comparisons (T1), each against its catalog reference.
+# Holm adjusts within each metric across these comparisons.
+PAIRWISE_VARIANTS = (
     "append_umap",
+    "append_umap_w010",
     "aligned_umap",
-    "feature_stacking_hdbscan",
     "mv_hdbscan",
+    "feature_stacking_hdbscan",
+    "mv_co_reg_spectral",
+    "mv_spectral",
 )
-TABLE_METRICS = ("c_npmi", "c_v", "irbo", "topic_diversity")
+HDBSCAN_VARIANTS = tuple(
+    v for v in PAIRWISE_VARIANTS if v not in ("mv_co_reg_spectral", "mv_spectral")
+)
+# Main-text metrics; the rest are reported in the appendix.
+TABLE_METRICS = ("c_npmi", "c_v", "irbo")
+APPENDIX_METRICS = ("topic_diversity", "u_mass")
 WEIGHTED_APPEND = (
     ("append_umap_w000", 0.0),
     ("append_umap_w005", 0.05),
@@ -164,15 +174,17 @@ def ablation_table(
     datasets: pl.DataFrame,
     summary: pl.DataFrame,
     catalog: dict,
-    variants=HDBSCAN_VARIANTS,
+    variants=PAIRWISE_VARIANTS,
     metrics=TABLE_METRICS,
     documents: dict[str, int] | None = None,
 ) -> pl.DataFrame:
     """One row per variant: cross-dataset results for each metric.
 
     Columns per metric: mean dataset Δ, W/T/L, rank-biserial r and Holm p.
-    Also the mean change in realized topics, in noise share (percentage
-    points, when `documents` is given) and the tested datasets.
+    Also the variant's reference and family, the mean change in realized
+    topics, in noise share (percentage points, when `documents` is given)
+    and in topic-metadata AMI (with the datasets it covers), and the tested
+    datasets.
     """
     by_key = {(r["Model ID"], r["Metric"]): r for r in summary.to_dicts()}
     topics = _raw_change(datasets, "n_topics")
@@ -187,7 +199,13 @@ def ablation_table(
         )
     rows = []
     for variant in variants:
-        row = {"Model ID": variant, "Proposed": model_name(variant, catalog)}
+        entry = catalog.get(variant, {})
+        row = {
+            "Model ID": variant,
+            "Proposed": model_name(variant, catalog),
+            "Reference ID": entry.get("baseline_id"),
+            "Family": entry.get("family"),
+        }
         for metric in metrics:
             result = by_key.get((variant, metric), {})
             wins = result.get("Wins")
@@ -206,10 +224,19 @@ def ablation_table(
             if documents
             else None
         )
+        ami = by_key.get((variant, "meta_ami_mean"), {})
+        row["Δ AMI"] = ami.get("Mean dataset delta")
+        row["AMI datasets"] = ami.get("Datasets") or 0
         tested = by_key.get((variant, metrics[0]), {})
         row["Datasets"] = tested.get("Datasets") or 0
         rows.append(row)
     return pl.DataFrame(rows, infer_schema_length=None)
+
+
+def paper_label(model_id: str, catalog: dict) -> str:
+    """LaTeX name of a model in the paper: its `latex_label`, else its name."""
+    entry = catalog.get(model_id, {})
+    return entry.get("latex_label") or _latex_escape(model_name(model_id, catalog))
 
 
 def _latex_escape(text: str) -> str:
@@ -226,56 +253,108 @@ def _signed(value, digits: int = 3) -> str:
     return "--" if value is None else f"${value:+.{digits}f}$"
 
 
+def _p_value(value) -> str:
+    return "--" if value is None else f"{value:.2f}"
+
+
+def _min_p_sentence(table: pl.DataFrame) -> str:
+    tested = max((row["Datasets"] for row in table.to_dicts()), default=0)
+    if not tested:
+        return ""
+    return (
+        f"With {tested} datasets the smallest attainable two-sided $p$ is "
+        f"${2 / 2**tested:.4g}$, so the tests summarize cross-dataset "
+        r"consistency rather than confirm effects."
+    )
+
+
 def ablation_table_latex(
     table: pl.DataFrame,
     catalog: dict,
-    reference: str = "baseline",
     metrics=TABLE_METRICS,
     preliminary: bool = False,
-    label: str = "tab:hdbscan_ablation",
+    label: str = "tab:pairwise_ablation",
     note: str = "",
 ) -> str:
-    """Booktabs `table*`: mean Δ with W/T/L per metric, then topics and noise."""
+    """Booktabs `table*` of the planned comparisons, grouped by reference.
+
+    Per metric: mean Δ with W/T/L, and the Holm-adjusted exact Wilcoxon p.
+    Then Δ realized topics, Δ noise share (HDBSCAN family only) and ΔAMI.
+    """
+    n_columns = 2 + 2 * len(metrics) + 3
+    header_top = " & ".join(
+        ["", ""]
+        + [rf"\multicolumn{{2}}{{c}}{{{_latex_metric(m)}}}" for m in metrics]
+        + ["", "", ""]
+    )
+    rules = " ".join(
+        rf"\cmidrule(lr){{{3 + 2 * i}-{4 + 2 * i}}}" for i in range(len(metrics))
+    )
     header = " & ".join(
-        [r"\textbf{Proposed}", r"\textbf{$n$}"]
-        + [rf"\textbf{{{_latex_metric(m)}}}" for m in metrics]
-        + [r"\textbf{$\Delta$ topics}", r"\textbf{$\Delta$ noise (pp)}"]
+        [r"\textbf{Model}", "$n$"]
+        + [r"$\Delta$", "$p$"] * len(metrics)
+        + [r"$\Delta K$", r"$\Delta$ noise", r"$\Delta$ AMI"]
     )
     body = []
+    reference = None
+    any_partial_ami = False
     for row in table.to_dicts():
-        cells = [_latex_escape(row["Proposed"]), str(row["Datasets"])]
+        if row["Reference ID"] != reference:
+            reference = row["Reference ID"]
+            if body:
+                body.append(r"\midrule")
+            body.append(
+                rf"\multicolumn{{{n_columns}}}{{l}}{{\textit{{vs.}} "
+                rf"{paper_label(reference, catalog)}}} \\"
+            )
+        cells = [paper_label(row["Model ID"], catalog), str(row["Datasets"])]
         for metric in metrics:
             wtl = row[f"{metric} W/T/L"]
             cells.append(
                 _signed(row[f"{metric} Δ"])
                 + (rf"\,{{\scriptsize({wtl})}}" if wtl else "")
             )
+            cells.append(_p_value(row[f"{metric} Holm p"]))
         cells.append(_signed(row["Δ topics"], 1))
-        cells.append(_signed(row["Δ noise"], 1))
+        cells.append(
+            _signed(row["Δ noise"], 1) if row.get("Family") == "hdbscan" else "--"
+        )
+        ami = _signed(row["Δ AMI"], 2)
+        if row["Δ AMI"] is not None and row["AMI datasets"] < row["Datasets"]:
+            ami += r"$^\dagger$"
+            any_partial_ami = True
+        cells.append(ami)
         body.append(" & ".join(cells) + r" \\")
     caption = (
-        "Change relative to "
-        + _latex_escape(model_name(reference, catalog))
-        + r", averaged over datasets (each dataset averages 3 seeds $\times$ 5 "
-        r"requested topic counts). Positive values favour the proposed model; "
-        r"W/T/L counts datasets. $\Delta$ topics and $\Delta$ noise (share of "
-        r"documents assigned to the noise cluster, in percentage points) are "
-        r"proposed minus reference. $n$: datasets with complete runs."
+        r"Planned comparisons of each \systemshort variant with its reference, "
+        r"averaged over datasets (each dataset averages 3 seeds $\times$ 5 "
+        r"requested topic counts). Positive $\Delta$ favours the variant; "
+        r"wins/ties/losses across datasets in parentheses; $n$ is the number of "
+        r"datasets with complete runs. $p$: exact two-sided Wilcoxon signed-rank "
+        r"$p$, "
+        r"Holm-adjusted within each metric across the comparisons in this table. "
+        + _min_p_sentence(table)
+        + r" $\Delta K$ (realized topics), $\Delta$ noise (share of documents "
+        r"in the noise cluster, percentage points) and $\Delta$ AMI "
+        r"(topic--metadata alignment) are variant minus reference."
     )
+    if any_partial_ami:
+        caption += r" $^\dagger$AMI available for fewer datasets."
     if note:
         caption += " " + _latex_escape(note)
     if preliminary:
         caption += r" \textbf{Preliminary.}"
-    columns = "l" + "c" * (len(metrics) + 3)
     lines = [
         "% Generated by scripts/analysis/make_paper_outputs.py",
         *([f"% {PRELIMINARY_NOTE}"] if preliminary else []),
         r"\begin{table*}[t]",
         r"\centering",
         r"\small",
-        r"\setlength{\tabcolsep}{4pt}",
-        rf"\begin{{tabular}}{{{columns}}}",
+        r"\setlength{\tabcolsep}{3pt}",
+        rf"\begin{{tabular}}{{lc{'rc' * len(metrics)}rrr}}",
         r"\toprule",
+        header_top + r" \\",
+        rules,
         header + r" \\",
         r"\midrule",
         *body,
@@ -290,18 +369,19 @@ def ablation_table_latex(
 
 def ablation_stats_latex(
     table: pl.DataFrame,
+    catalog: dict,
     metrics=TABLE_METRICS,
     preliminary: bool = False,
-    label: str = "tab:hdbscan_ablation_stats",
+    label: str = "tab:pairwise_ablation_stats",
     note: str = "",
 ) -> str:
     """Rank-biserial r and Holm-adjusted exact p for each variant and metric."""
     header = " & ".join(
-        [r"\textbf{Proposed}"] + [rf"\textbf{{{_latex_metric(m)}}}" for m in metrics]
+        [r"\textbf{Model}"] + [rf"\textbf{{{_latex_metric(m)}}}" for m in metrics]
     )
     body = []
     for row in table.to_dicts():
-        cells = [_latex_escape(row["Proposed"])]
+        cells = [paper_label(row["Model ID"], catalog)]
         for metric in metrics:
             r, p = row[f"{metric} r"], row[f"{metric} Holm p"]
             cells.append(
@@ -312,18 +392,9 @@ def ablation_stats_latex(
                 else f"${r:+.2f}$"
             )
         body.append(" & ".join(cells) + r" \\")
-    tested = max((row["Datasets"] for row in table.to_dicts()), default=0)
-    floor = (
-        f"With {tested} datasets the smallest attainable two-sided $p$ is "
-        f"${2 / 2**tested:.4g}$, so the tests"
-        if tested
-        else "The tests"
-    )
     caption = (
         r"Rank-biserial correlation $r$ and, in parentheses, Holm-adjusted exact "
-        r"Wilcoxon signed-rank $p$ across datasets. "
-        + floor
-        + r" summarize cross-dataset consistency rather than confirm effects."
+        r"Wilcoxon signed-rank $p$ across datasets. " + _min_p_sentence(table)
     )
     if note:
         caption += " " + _latex_escape(note)
