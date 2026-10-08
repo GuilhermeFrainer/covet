@@ -237,7 +237,13 @@ def to_latex(table: pl.DataFrame, notes: list[str]) -> str:
     lines += [r"\bottomrule", r"\end{tabular}"]
     if notes:
         lines.append(r"\par\smallskip\footnotesize " + " ".join(notes))
-    lines.append(r"\end{table*}")
+    lines += [
+        r"\caption{Summary of the datasets. Document statistics count each "
+        r"retained document once, before chunking; chunk statistics describe "
+        r"the model input, in WordPiece tokens.}",
+        r"\label{tab:dataset_summary}",
+        r"\end{table*}",
+    ]
     return "\n".join(lines) + "\n"
 
 
