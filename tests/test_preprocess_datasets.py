@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for the dataset preprocessing script."""
 
+import nltk
 import polars as pl
 import pytest
 import yaml
@@ -15,6 +16,7 @@ from src.processing import (
     process_dataset,
     remove_urls,
     split_long_sentence,
+    stem_and_remove_stopwords,
 )
 
 
@@ -315,3 +317,50 @@ def test_process_dataset_drops_empty(tmp_path):
     assert processed_df.height == 2
     assert "Valid text" in processed_df["clean_text"].to_list()
     assert "Another valid one" in processed_df["clean_text"].to_list()
+
+
+def test_no_chunk_only_repeats_the_overlap(minilm_tokenizer):
+    """A sentence that cannot fit beside the overlap starts a fresh chunk.
+
+    Otherwise the chunker emitted chunks holding nothing but the previous
+    chunk's last sentences.
+    """
+    run_on = " ".join(f"policy{i} rate" for i in range(120))
+    text = f"Short one. Short two. {run_on}. Short three. Short four."
+    df = pl.DataFrame({"id": [3], "text": [text]})
+
+    result = chunk_text_with_overlap(
+        df, "text", minilm_tokenizer, max_tokens=50, overlap_sentences=2
+    )
+
+    chunks = result["text"].to_list()
+    assert len(chunks) > 2
+    for previous, chunk in zip(chunks, chunks[1:]):
+        assert not previous.endswith(chunk), chunk
+    assert chunks[0].startswith("Short one.") and chunks[-1].endswith("Short four.")
+    assert all(count_tokens(minilm_tokenizer, t) <= 50 for t in chunks)
+
+
+def test_process_dataset_derives_text_columns_per_chunk(sample_yelp_df, tmp_path):
+    """Stemmed and lowercased text describe each chunk, not its whole document."""
+    input_path = tmp_path / "dummy_yelp.csv"
+    sample_yelp_df.write_csv(input_path)
+
+    processed_df = process_dataset(
+        dataset_name="yelp",
+        input_path=str(input_path),
+        output_path=str(tmp_path / "yelp_processed.parquet"),
+        tokenizer_name="sentence-transformers/all-MiniLM-L6-v2",
+        max_tokens=20,
+    )
+
+    stemmer = nltk.stem.snowball.SnowballStemmer("english")
+    stop_words = set(nltk.corpus.stopwords.words("english"))
+    for row in processed_df.iter_rows(named=True):
+        assert row["clean_text_stemmed"] == stem_and_remove_stopwords(
+            row["clean_text"], stemmer, stop_words
+        )
+        assert row["clean_text_lower"] == row["clean_text"].lower()
+    first = processed_df.filter(pl.col("id") == processed_df["id"][0])
+    assert first.height > 1
+    assert first["clean_text_stemmed"].n_unique() == first.height

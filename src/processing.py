@@ -222,6 +222,35 @@ def split_long_sentence(
     return pieces
 
 
+def derived_text_columns(stem: bool = True) -> list[pl.Expr]:
+    """Representations derived from `clean_text`, for a document or a chunk.
+
+    `clean_text_lower` lowercases it, `clean_text_lower_punctless` also drops
+    punctuation, and with `stem`, `clean_text_stemmed` (Version 2) is the
+    lowercased, stopword-free, Snowball-stemmed text.
+    """
+    lower = pl.col("clean_text").str.to_lowercase()
+    columns = [
+        lower.alias("clean_text_lower"),
+        lower.str.replace_all(r"[^\w\s]", "")
+        .str.replace_all(r"\s+", " ")
+        .str.strip_chars()
+        .alias("clean_text_lower_punctless"),
+    ]
+    if stem:
+        stemmer = nltk.stem.snowball.SnowballStemmer("english")
+        stop_words = set(nltk.corpus.stopwords.words("english"))
+        columns.append(
+            pl.col("clean_text")
+            .map_elements(
+                lambda x: stem_and_remove_stopwords(x, stemmer, stop_words),
+                return_dtype=pl.Utf8,
+            )
+            .alias("clean_text_stemmed")
+        )
+    return columns
+
+
 def chunk_text_with_overlap(
     df: pl.DataFrame,
     text_column: str,
@@ -270,6 +299,7 @@ def chunk_text_with_overlap(
             continue
 
         current_pos = 0
+        previous_end = 0
         while current_pos < len(sentences):
             chunk_sentences = []
             chunk_tokens = 0
@@ -284,6 +314,13 @@ def chunk_text_with_overlap(
                 chunk_sentences.append(sentences[end_pos])
                 chunk_tokens += sent_tokens
                 end_pos += 1
+
+            if end_pos <= previous_end:
+                # The next sentence does not fit beside the overlap, so this
+                # chunk would only repeat the previous one. Drop the overlap.
+                current_pos = previous_end
+                continue
+            previous_end = end_pos
 
             new_row = row.copy()
             new_row[text_column] = " ".join(chunk_sentences)
@@ -357,28 +394,13 @@ def process_dataset(
             .str.replace_all(r"\s+", " ")
             .str.strip_chars()
         )
-        .with_columns(
-            clean_text_lower=pl.col("clean_text").str.to_lowercase(),
-        )
-        .with_columns(
-            clean_text_lower_punctless=pl.col("clean_text_lower")
-            .str.replace_all(r"[^\w\s]", "")
-            .str.replace_all(r"\s+", " ")
-            .str.strip_chars()
-        )
     )
 
+    # Document-level versions, used only to drop documents empty in any
+    # representation; every chunk gets its own versions after chunking.
     if stem:
         logging.info("Adding stemmed and stopword-removed text column (Version 2)...")
-        stemmer = nltk.stem.snowball.SnowballStemmer("english")
-        stop_words = set(nltk.corpus.stopwords.words("english"))
-
-        lf = lf.with_columns(
-            clean_text_stemmed=pl.col("clean_text").map_elements(
-                lambda x: stem_and_remove_stopwords(x, stemmer, stop_words),
-                return_dtype=pl.Utf8,
-            )
-        )
+    lf = lf.with_columns(derived_text_columns(stem))
 
     # Filter out empty or whitespace-only rows in clean_text and clean_text_stemmed
     initial_row_count = lf.select(pl.len()).collect().item()
@@ -484,7 +506,16 @@ def process_dataset(
                 tokenizer,
                 max_tokens=max_tokens,
                 overlap_sentences=2,
-            )
+            ).with_columns(derived_text_columns(stem))
+            if stem:
+                # A chunk of stop words alone has no stemmed text; drop it from
+                # every representation to keep the rows aligned.
+                empty = chunked_df["clean_text_stemmed"].str.strip_chars() == ""
+                if empty.any():
+                    logging.info(
+                        f"Dropped {empty.sum()} chunks with no text after stemming."
+                    )
+                    chunked_df = chunked_df.filter(~empty)
 
             process_bar.set_postfix_str(
                 f"Original: {original_rows}, Chunked: {chunked_df.height}"
