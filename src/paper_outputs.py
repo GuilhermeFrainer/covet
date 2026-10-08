@@ -559,7 +559,7 @@ def dose_response(
 
 DOSE_PANELS = (
     ("c_npmi", "Δ NPMI"),
-    ("topic_diversity", "Δ Topic diversity"),
+    ("irbo", "Δ IRBO"),
     ("noise_share", "Δ noise share (pp)"),
     ("meta_ami_mean", "Δ topic–metadata AMI"),
 )
