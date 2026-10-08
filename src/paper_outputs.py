@@ -51,6 +51,14 @@ WEIGHTED_APPEND = (
     ("append_umap_w050", 0.5),
 )
 DATASET_MARKERS = dict(zip(BENCHMARK_DATASETS, ("o", "s", "^", "D", "X")))
+# Dataset names as the paper writes them.
+DATASET_LABELS = {
+    "anes": "ANES",
+    "fed": "Fed",
+    "gadarian": "Gadarian",
+    "trump": "Trump",
+    "yelp": "Yelp",
+}
 DATASET_COLORS = dict(
     zip(BENCHMARK_DATASETS, ("#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00"))
 )
@@ -243,6 +251,20 @@ def paper_label(model_id: str, catalog: dict) -> str:
     """LaTeX name of a model in the paper: its `latex_label`, else its name."""
     entry = catalog.get(model_id, {})
     return entry.get("latex_label") or _latex_escape(model_name(model_id, catalog))
+
+
+def figure_label(model_id: str, catalog: dict) -> str:
+    r"""Matplotlib mathtext version of a model's `latex_label`.
+
+    `\systemshort` becomes "COVET" and `\text` becomes `\mathrm`, so the
+    figures name models as the tables do. Models without a `latex_label` keep
+    their plain name.
+    """
+    label = catalog.get(model_id, {}).get("latex_label")
+    if not label:
+        return model_name(model_id, catalog)
+    label = label.replace(r"\text{\systemshort}", r"\mathrm{COVET}")
+    return label.replace(r"\text{", r"\mathrm{")
 
 
 def _latex_escape(text: str) -> str:
@@ -476,6 +498,7 @@ def plot_tradeoff(
     fig, ax = plt.subplots(figsize=(3.4, 2.9))
     ax.axhline(0, color="#888888", linewidth=0.7, linestyle="--", zorder=0)
     ax.axvline(0, color="#888888", linewidth=0.7, linestyle="--", zorder=0)
+    points = points.filter(pl.col("Model ID").is_in(list(variants)))
     for row in points.to_dicts():
         ax.scatter(
             row["x"],
@@ -499,14 +522,19 @@ def plot_tradeoff(
             color=colors[v],
             marker="o",
             linestyle="",
-            label=model_name(v, catalog or {}),
+            label=figure_label(v, catalog or {}),
         )
         for v in variants
         if v in set(points["Model ID"].to_list())
     ]
     dataset_handles = [
         plt.Line2D(
-            [], [], color="#444444", marker=DATASET_MARKERS[d], linestyle="", label=d
+            [],
+            [],
+            color="#444444",
+            marker=DATASET_MARKERS[d],
+            linestyle="",
+            label=DATASET_LABELS[d],
         )
         for d in BENCHMARK_DATASETS
         if d in set(points["Dataset"].to_list())
@@ -591,7 +619,7 @@ def plot_dose_response(
                 color=DATASET_COLORS[dataset],
                 markersize=4,
                 linewidth=1.2,
-                label=dataset,
+                label=DATASET_LABELS[dataset],
             )
         ax.set_title(title)
         ax.grid(alpha=0.2)

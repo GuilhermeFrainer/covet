@@ -13,6 +13,7 @@ import polars as pl
 from src.comparisons.analysis import BENCHMARK_DATASETS, REQUESTED_TOPICS
 from src.paper_benchmark import model_runs, standard_runs
 from src.paper_outputs import (
+    DATASET_LABELS,
     HDBSCAN_VARIANTS,
     PRELIMINARY_NOTE,
     _latex_escape,
@@ -73,9 +74,7 @@ def noise_table_latex(
     """Booktabs `table*`: models x datasets, plus the mean over datasets."""
     cells = {(r["Model ID"], r["Dataset"]): r for r in coverage.to_dicts()}
     header = " & ".join(
-        [r"\textbf{Model}"]
-        + [d.capitalize() if d != "anes" else "ANES" for d in BENCHMARK_DATASETS]
-        + ["Mean"]
+        [r"\textbf{Model}"] + [DATASET_LABELS[d] for d in BENCHMARK_DATASETS] + ["Mean"]
     )
     body, partial = [], False
     for model in models:

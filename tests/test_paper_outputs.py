@@ -208,3 +208,28 @@ def test_caption_note_names_the_trump_variant(comparison):
         table, CATALOG, metrics=("c_npmi",), note=note
     )
     assert note in main and note in stats
+
+
+def test_figure_labels_use_paper_notation():
+    assert paper_outputs.figure_label("append_umap", CATALOG) == (
+        r"$\mathrm{COVET}_\mathrm{Ap}$"
+    )
+    assert paper_outputs.figure_label("baseline", CATALOG) == (r"$\mathrm{BERTopic}_1$")
+    # No latex_label: the plain name.
+    assert paper_outputs.figure_label("append_umap_w010", CATALOG) == "Weighted 0.1"
+
+
+def test_tradeoff_plots_only_the_given_variants(comparison, tmp_path):
+    datasets, _ = comparison
+    points = paper_outputs.tradeoff_points(datasets, CATALOG, "c_npmi", "irbo")
+    extra = points.with_columns(pl.lit("mv_spectral").alias("Model ID"))
+    written = paper_outputs.plot_tradeoff(
+        pl.concat([points, extra]),
+        "c_npmi",
+        "irbo",
+        tmp_path / "tradeoff",
+        variants=("append_umap",),
+        catalog=CATALOG,
+        formats=("png",),
+    )
+    assert written[0].exists()
