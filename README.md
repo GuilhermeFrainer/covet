@@ -121,6 +121,29 @@ bash scripts/pipelines/slurm/queue_exp.sh -d fed --stemmed
 Use `--help` for selection and resource options. `--dry-run` previews submission;
 it does not train models.
 
+The default QOS holds at most 10 jobs per user (5 running). The queue therefore
+keeps at most `--max-queued` jobs (default 10) in SLURM and waits for jobs to
+finish before submitting more, so run large batches inside `tmux`:
+
+```bash
+tmux new -s queue
+bash scripts/pipelines/slurm/queue_exp.sh -d gadarian,anes -m baseline,mv_spectral --split -y
+# Detach with Ctrl-b d; reattach later with: tmux attach -t queue
+```
+
+To fit more runs under the limit, `--pack K` runs K consecutive jobs of the
+plan one after another inside a single SLURM job
+([`slurm_pack_job.sh`](scripts/experiments/slurm_pack_job.sh)). Different
+models, STM included, can share a job. A packed job requests the largest memory
+and CPUs among its runs, and its time limit defaults to the sum of theirs;
+`--time` sets the limit of each packed job instead. Each run copies its results
+back as it finishes, and a failed run does not stop the rest. Preview the
+grouping with `--list` or `--dry-run`:
+
+```bash
+bash scripts/pipelines/slurm/queue_exp.sh -d fed --pack 4 --time 3-00:00:00 --dry-run
+```
+
 ### Individual Experiments
 
 For an individual configuration, use `scripts/experiments/run_optimizer.py` directly.

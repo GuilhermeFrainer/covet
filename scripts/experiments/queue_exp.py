@@ -2,14 +2,17 @@
 
 Provides command-line argument parsing and orchestration, delegating domain
 logic to src.experiment_queue and worker execution to scripts/experiments/slurm_job.sh
-(STM: scripts/experiments/slurm_stm_job.sh).
+(STM: scripts/experiments/slurm_stm_job.sh). Packed jobs run several of those
+workers in sequence through scripts/experiments/slurm_pack_job.sh.
 """
 
 from __future__ import annotations
 
 import argparse
+import getpass
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -19,11 +22,19 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import src.logger_config as logger_config
-from src.experiment_queue import QueuePlan, create_queue_plan
+from src.experiment_queue import QueuePlan, SlurmJobConfig, create_queue_plan
 
 LOG_DIR = PROJECT_ROOT / "logs"
 DEFAULT_WORKER_SCRIPT = PROJECT_ROOT / "scripts" / "experiments" / "slurm_job.sh"
 STM_WORKER_SCRIPT = PROJECT_ROOT / "scripts" / "experiments" / "slurm_stm_job.sh"
+PACK_SCRIPT = PROJECT_ROOT / "scripts" / "experiments" / "slurm_pack_job.sh"
+
+# The cluster's default QOS ("normal") lets a user hold 10 jobs, pending
+# and running together, of which 5 run at once.
+DEFAULT_MAX_QUEUED = 10
+DEFAULT_POLL_SECONDS = 60
+# Text sbatch prints when a QOS refuses a job over the submit limit.
+SUBMIT_LIMIT_REASON = "MaxSubmitJob"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -193,7 +204,24 @@ Examples:
         dest="time",
         type=str,
         default=None,
-        help="Override time limit per job (default: 24:00:00).",
+        help=(
+            "Override time limit per job (default: 24:00:00). With --pack, "
+            "this is the limit of each packed job (default: the sum of its "
+            "runs' limits)."
+        ),
+    )
+
+    parser.add_argument(
+        "-p",
+        "--pack",
+        dest="pack",
+        type=int,
+        default=1,
+        help=(
+            "Run this many consecutive jobs of the plan one after another in a "
+            "single SLURM job, which requests the largest memory and CPUs "
+            "among them (default: 1, no packing)."
+        ),
     )
 
     parser.add_argument(
@@ -204,6 +232,30 @@ Examples:
         help=(
             "Path to SLURM worker script for non-STM models "
             "(default: scripts/experiments/slurm_job.sh)."
+        ),
+    )
+
+    parser.add_argument(
+        "--max-queued",
+        dest="max_queued",
+        type=int,
+        default=DEFAULT_MAX_QUEUED,
+        help=(
+            "Keep at most this many of your jobs in the queue, waiting for "
+            "jobs to finish before submitting more. Match it to your QOS "
+            f"MaxSubmitPU (default: {DEFAULT_MAX_QUEUED}; 0 disables waiting). "
+            "Run large batches inside tmux so the wait survives logout."
+        ),
+    )
+
+    parser.add_argument(
+        "--poll-seconds",
+        dest="poll_seconds",
+        type=int,
+        default=DEFAULT_POLL_SECONDS,
+        help=(
+            "Seconds between queue checks while waiting for a free slot "
+            f"(default: {DEFAULT_POLL_SECONDS})."
         ),
     )
 
@@ -239,6 +291,12 @@ def format_plan_summary(plan: QueuePlan) -> str:
 
     lines.append(f" Total Jobs:   {plan.total_jobs}")
 
+    if plan.packs:
+        lines.append(
+            f" Packing:      up to {len(plan.packs[0].jobs)} jobs in sequence per "
+            f"SLURM job ({plan.total_submissions} SLURM jobs)"
+        )
+
     if plan.use_stemmed:
         lines.append(" Variant:      STEMMED (using clean_text_stemmed)")
 
@@ -258,17 +316,28 @@ def format_plan_summary(plan: QueuePlan) -> str:
 def format_list_jobs(plan: QueuePlan) -> str:
     """Format the resolved jobs list for --list mode."""
     lines = ["", "Resolved Jobs List:"]
-    for job in plan.jobs:
+
+    def job_line(job: SlurmJobConfig, indent: str = " ") -> str:
         if job.model_idx is not None:
-            lines.append(
-                f" - Dataset: {job.dataset} (Config dir: {job.exp_dir}) | "
+            return (
+                f"{indent}- Dataset: {job.dataset} (Config dir: {job.exp_dir}) | "
                 f"Model: {job.model} | Run: #{job.model_idx}"
             )
-        else:
-            lines.append(
-                f" - Dataset: {job.dataset} (Config dir: {job.exp_dir}) | "
-                f"Model: {job.model} (All runs)"
-            )
+        return (
+            f"{indent}- Dataset: {job.dataset} (Config dir: {job.exp_dir}) | "
+            f"Model: {job.model} (All runs)"
+        )
+
+    if not plan.packs:
+        lines.extend(job_line(job) for job in plan.jobs)
+        return "\n".join(lines)
+
+    for pack_count, pack in enumerate(plan.packs, 1):
+        lines.append(
+            f" SLURM job {pack_count}: {pack.job_name} | Mem: {pack.mem} | "
+            f"CPUs: {pack.cpus} | Time: {pack.time_limit}"
+        )
+        lines.extend(job_line(job, indent="   ") for job in pack.jobs)
     return "\n".join(lines)
 
 
@@ -287,17 +356,57 @@ def confirm_submission(total_jobs: int) -> bool:
     return reply in ("y", "yes")
 
 
+def count_queued_jobs(runner: Callable = subprocess.run) -> int:
+    """Return how many of the current user's jobs SLURM holds, any state."""
+    result = runner(
+        ["squeue", "-h", "-u", getpass.getuser(), "-o", "%i"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return sum(1 for line in result.stdout.splitlines() if line.strip())
+
+
+def wait_for_slot(
+    max_queued: int,
+    runner: Callable = subprocess.run,
+    sleeper: Callable[[float], None] = time.sleep,
+    poll_seconds: float = DEFAULT_POLL_SECONDS,
+) -> None:
+    """Block until the user holds fewer than `max_queued` jobs."""
+    announced = False
+    while (queued := count_queued_jobs(runner)) >= max_queued:
+        if not announced:
+            print(
+                f"  Queue full ({queued}/{max_queued} jobs); "
+                f"checking again every {poll_seconds:g}s..."
+            )
+            announced = True
+        sleeper(poll_seconds)
+
+
 def submit_jobs(
     plan: QueuePlan,
     worker_script: Path | str,
     runner: Callable = subprocess.run,
     stm_worker_script: Path | str = STM_WORKER_SCRIPT,
-) -> None:
+    max_queued: int = 0,
+    poll_seconds: float = DEFAULT_POLL_SECONDS,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> list[str]:
     """Execute or simulate submission of all jobs in the plan.
 
     STM jobs go to `stm_worker_script`, every other job to `worker_script`.
+    With `max_queued` above zero, each submission first waits until the user
+    holds fewer than that many jobs. A job refused for exceeding the submit
+    limit is retried after a wait; any other refusal is reported and the
+    remaining jobs are still submitted.
+
+    Returns:
+        Names of the jobs sbatch refused.
     """
     Path("slurm_log").mkdir(parents=True, exist_ok=True)
+    failed: list[str] = []
 
     for job_count, job in enumerate(plan.jobs, 1):
         res_suffix = f" | Res: {job.reservation}" if job.reservation else ""
@@ -316,28 +425,135 @@ def submit_jobs(
                     f"Mem: {job.mem} | CPUs: {job.cpus} | "
                     f"Time: {job.time_limit}{res_suffix}"
                 )
+            continue
+
+        if job.model_idx is not None:
+            print(
+                f"[{job_count}/{plan.total_jobs}] Queuing job for "
+                f"Dataset: {job.dataset} | Model: {job.model} | "
+                f"Run: #{job.model_idx}"
+            )
         else:
-            if job.model_idx is not None:
-                print(
-                    f"[{job_count}/{plan.total_jobs}] Queuing job for "
-                    f"Dataset: {job.dataset} | Model: {job.model} | "
-                    f"Run: #{job.model_idx}"
-                )
-            else:
-                print(
-                    f"[{job_count}/{plan.total_jobs}] Queuing job for "
-                    f"Dataset: {job.dataset} | Model: {job.model}"
-                )
+            print(
+                f"[{job_count}/{plan.total_jobs}] Queuing job for "
+                f"Dataset: {job.dataset} | Model: {job.model}"
+            )
 
-            script = stm_worker_script if job.is_stm else worker_script
-            sbatch_cmd = job.full_sbatch_command(str(script))
-            runner(sbatch_cmd, check=True)
+        script = stm_worker_script if job.is_stm else worker_script
+        sbatch_cmd = job.full_sbatch_command(str(script))
+        if not submit_until_accepted(
+            sbatch_cmd, job.job_name, runner, max_queued, poll_seconds, sleeper
+        ):
+            failed.append(job.job_name)
 
+    print_submission_summary(plan, failed)
+    return failed
+
+
+def submit_packs(
+    plan: QueuePlan,
+    worker_script: Path | str,
+    runner: Callable = subprocess.run,
+    stm_worker_script: Path | str = STM_WORKER_SCRIPT,
+    pack_script: Path | str = PACK_SCRIPT,
+    max_queued: int = 0,
+    poll_seconds: float = DEFAULT_POLL_SECONDS,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> list[str]:
+    """Execute or simulate submission of the plan's packed jobs.
+
+    Each pack is one SLURM job that runs its members' workers in sequence
+    through `pack_script`. Waiting and retries work as in `submit_jobs`.
+
+    Returns:
+        Names of the packed jobs sbatch refused.
+    """
+    Path("slurm_log").mkdir(parents=True, exist_ok=True)
+    failed: list[str] = []
+    total = plan.total_submissions
+
+    for pack_count, pack in enumerate(plan.packs, 1):
+        n_runs = len(pack.jobs)
+        if plan.dry_run:
+            res_suffix = f" | Res: {pack.reservation}" if pack.reservation else ""
+            print(
+                f"[{pack_count}/{total}] [DRY RUN] Job: {pack.job_name} "
+                f"({n_runs} in sequence) | Mem: {pack.mem} | CPUs: {pack.cpus} | "
+                f"Time: {pack.time_limit}{res_suffix}"
+            )
+        else:
+            print(
+                f"[{pack_count}/{total}] Queuing job {pack.job_name} "
+                f"({n_runs} in sequence)"
+            )
+        for job in pack.jobs:
+            run = f" | Run: #{job.model_idx}" if job.model_idx is not None else ""
+            print(f"    - Dataset: {job.dataset} | Model: {job.model}{run}")
+        if plan.dry_run:
+            continue
+
+        sbatch_cmd = pack.full_sbatch_command(
+            str(pack_script), str(worker_script), str(stm_worker_script)
+        )
+        if not submit_until_accepted(
+            sbatch_cmd, pack.job_name, runner, max_queued, poll_seconds, sleeper
+        ):
+            failed.append(pack.job_name)
+
+    print_submission_summary(plan, failed)
+    return failed
+
+
+def submit_until_accepted(
+    sbatch_cmd: list[str],
+    job_name: str,
+    runner: Callable,
+    max_queued: int,
+    poll_seconds: float,
+    sleeper: Callable[[float], None],
+) -> bool:
+    """Run one sbatch command, waiting while the queue is full.
+
+    Returns:
+        Whether sbatch accepted the job.
+    """
+    while True:
+        if max_queued > 0:
+            wait_for_slot(max_queued, runner, sleeper, poll_seconds)
+        try:
+            result = runner(sbatch_cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            stderr = (e.stderr or "").strip()
+            if SUBMIT_LIMIT_REASON in stderr:
+                print(f"  Submit limit reached; retrying in {poll_seconds:g}s...")
+                sleeper(poll_seconds)
+                continue
+            print(f"  sbatch refused {job_name}: {stderr}", file=sys.stderr)
+            return False
+        if isinstance(result.stdout, str) and result.stdout.strip():
+            print(f"  {result.stdout.strip()}")
+        return True
+
+
+def print_submission_summary(plan: QueuePlan, failed: list[str]) -> None:
+    """Print how many SLURM jobs were simulated, dispatched, or refused."""
+    total = plan.total_submissions
+    runs = f", {plan.total_jobs} runs" if plan.packs else ""
     print("------------------------------------------------")
     if plan.dry_run:
-        print(f"Dry run complete ({plan.total_jobs} jobs simulated).")
+        print(f"Dry run complete ({total} jobs simulated{runs}).")
+    elif failed:
+        print(
+            f"{total - len(failed)} of {total} jobs dispatched{runs}; "
+            f"sbatch refused {len(failed)}: {' '.join(failed)}"
+        )
+    elif plan.packs:
+        print(
+            f"All {total} jobs ({plan.total_jobs} runs) have been dispatched "
+            "to the scheduler."
+        )
     else:
-        print(f"All {plan.total_jobs} jobs have been dispatched to the scheduler.")
+        print(f"All {total} jobs have been dispatched to the scheduler.")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -369,6 +585,7 @@ def main(argv: list[str] | None = None) -> int:
             cpus=args.cpus,
             time_limit=args.time,
             reservation=args.reservation,
+            pack_size=args.pack,
         )
     except ValueError as e:
         print(f"{e}", file=sys.stderr)
@@ -380,13 +597,23 @@ def main(argv: list[str] | None = None) -> int:
         print(format_list_jobs(plan))
         return 0
 
-    if not plan.dry_run and not args.yes and plan.total_jobs > 10:
-        if not confirm_submission(plan.total_jobs):
+    if args.max_queued < 0 or args.poll_seconds <= 0:
+        print("--max-queued must be >= 0 and --poll-seconds > 0.", file=sys.stderr)
+        return 1
+
+    if not plan.dry_run and not args.yes and plan.total_submissions > 10:
+        if not confirm_submission(plan.total_submissions):
             print("Aborted.")
             return 0
 
-    submit_jobs(plan, worker_script=worker_script)
-    return 0
+    submit = submit_packs if plan.packs else submit_jobs
+    failed = submit(
+        plan,
+        worker_script=worker_script,
+        max_queued=args.max_queued,
+        poll_seconds=args.poll_seconds,
+    )
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

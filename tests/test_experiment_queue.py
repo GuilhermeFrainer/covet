@@ -1,9 +1,13 @@
 """Tests for experiment queue pure logic in src.experiment_queue."""
 
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from scripts.experiments.queue_exp import PACK_SCRIPT
 from scripts.experiments.run_stm import resolve_stm_inputs
 from src.experiment_queue import (
     ALL_MODELS,
@@ -11,6 +15,7 @@ from src.experiment_queue import (
     DEFAULT_DATASETS,
     DEFAULT_MEM,
     DEFAULT_MODEL_INDICES,
+    PACK_SEPARATOR,
     STM_CPUS,
     STM_IMAGE,
     STM_MEM,
@@ -18,7 +23,10 @@ from src.experiment_queue import (
     build_jobs,
     count_config_runs,
     create_queue_plan,
+    format_time_limit,
+    parse_mem,
     parse_run_indices,
+    parse_time_limit,
     resolve_datasets,
     resolve_models,
 )
@@ -565,3 +573,164 @@ class TestStmJobs:
             config = load_config(exp_target, EXPERIMENTS_DIR)
             assert len(config["experiment"]["random_state"]) == 1, exp_target
             assert count_config_runs(exp_target) == len(config["models"])
+
+
+class TestSlurmLimits:
+    """Parsing and formatting of SLURM time limits and memory requests."""
+
+    @pytest.mark.parametrize(
+        ("value", "seconds"),
+        [
+            ("30", 30 * 60),
+            ("30:15", 30 * 60 + 15),
+            ("24:00:00", 86400),
+            ("1-12", 86400 + 12 * 3600),
+            ("2-01:30", 2 * 86400 + 3600 + 30 * 60),
+            ("1-00:00:05", 86405),
+        ],
+    )
+    def test_parse_time_limit(self, value, seconds):
+        assert parse_time_limit(value) == seconds
+
+    @pytest.mark.parametrize("value", ["", "abc", "1:2:3:4", "1-2:3:4:5", "x-01"])
+    def test_parse_time_limit_rejects_invalid(self, value):
+        with pytest.raises(ValueError, match="Invalid SLURM time limit"):
+            parse_time_limit(value)
+
+    def test_format_time_limit(self):
+        assert format_time_limit(86400 * 4) == "4-00:00:00"
+        assert format_time_limit(3600 + 61) == "01:01:01"
+
+    def test_parse_mem(self):
+        assert parse_mem("32G") == 32768
+        assert parse_mem("16000") == 16000
+        assert parse_mem("1t") == 1024 * 1024
+        with pytest.raises(ValueError, match="Invalid SLURM memory"):
+            parse_mem("lots")
+
+
+class TestPacking:
+    """Packing several jobs into SLURM jobs that run them in sequence."""
+
+    def _plan(self, pack_size, time_limit=None, models="baseline,stm,mv_k_means"):
+        return create_queue_plan(
+            raw_datasets="fed",
+            raw_models=None,
+            raw_exact_models=models,
+            raw_excludes=None,
+            raw_runs=None,
+            split=False,
+            use_stemmed=False,
+            keep_rep_stopwords=False,
+            time_limit=time_limit,
+            pack_size=pack_size,
+        )
+
+    def test_no_packing_by_default(self):
+        plan = self._plan(1)
+        assert plan.packs == ()
+        assert plan.total_submissions == plan.total_jobs == 3
+
+    def test_packs_consecutive_jobs(self):
+        plan = self._plan(2)
+        assert plan.total_jobs == 3
+        assert plan.total_submissions == 2
+        assert [len(p.jobs) for p in plan.packs] == [2, 1]
+        assert plan.packs[0].jobs == plan.jobs[:2]
+        assert plan.packs[0].job_name == "fed_baseline+1"
+        assert plan.packs[1].job_name == "fed_mv_k_means"
+
+    def test_pack_requests_largest_resources(self):
+        pack = self._plan(2).packs[0]  # baseline (32G, 4 CPUs) + STM (16G, 1)
+        assert pack.mem == DEFAULT_MEM
+        assert pack.cpus == DEFAULT_CPUS
+
+    def test_pack_time_sums_members_by_default(self):
+        plan = self._plan(3)
+        assert plan.packs[0].time_limit == "3-00:00:00"
+
+    def test_time_override_applies_to_the_pack(self):
+        plan = self._plan(3, time_limit="2-00:00:00")
+        assert plan.packs[0].time_limit == "2-00:00:00"
+        assert "--time=2-00:00:00" in plan.packs[0].sbatch_args
+        # Members keep their defaults; only the packed job is submitted.
+        assert all(job.time_limit == "24:00:00" for job in plan.jobs)
+
+    def test_invalid_pack_arguments(self):
+        with pytest.raises(ValueError, match="--pack must be at least 1"):
+            self._plan(0)
+        with pytest.raises(ValueError, match="Invalid SLURM time limit"):
+            self._plan(2, time_limit="soon")
+
+    def test_sbatch_command_separates_workers(self):
+        pack = self._plan(3).packs[0]
+        cmd = pack.full_sbatch_command("pack.sh", "worker.sh", "stm.sh")
+        script_at = cmd.index("pack.sh")
+        assert cmd[0] == "sbatch"
+        assert "--job-name=fed_baseline+2" in cmd[:script_at]
+        runs = " ".join(cmd[script_at + 1 :]).split(f" {PACK_SEPARATOR} ")
+        assert runs == [
+            "worker.sh fed fed/fed_standard_baseline --remove-rep-stopwords",
+            f"stm.sh fed fed/fed_standard_stm {STM_IMAGE}",
+            "worker.sh fed fed/fed_standard_mv_k_means --remove-rep-stopwords",
+        ]
+
+    def test_split_runs_keep_their_indices(self):
+        plan = create_queue_plan(
+            raw_datasets="fed",
+            raw_models="baseline",
+            raw_excludes=None,
+            raw_runs="1..5",
+            split=True,
+            use_stemmed=False,
+            keep_rep_stopwords=False,
+            pack_size=4,
+        )
+        assert [p.job_name for p in plan.packs] == [
+            "fed_baseline_m1+3",
+            "fed_baseline_m5",
+        ]
+        cmd = plan.packs[0].full_sbatch_command("p.sh", "w.sh", "s.sh")
+        assert cmd.count(PACK_SEPARATOR) == 3
+        assert cmd[-1] == "4"
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32" or shutil.which("bash") is None,
+    reason="runs the SLURM pack script with POSIX bash",
+)
+class TestPackScript:
+    """slurm_pack_job.sh runs every worker in order and reports failures."""
+
+    def _worker(self, tmp_path, name, exit_code):
+        script = tmp_path / name
+        script.write_text(
+            "#!/bin/bash\n"
+            f'echo "{name} $*" >> "{tmp_path}/calls.log"\n'
+            f"exit {exit_code}\n"
+        )
+        return str(script)
+
+    def test_runs_all_workers_and_fails_if_any_failed(self, tmp_path):
+        ok = self._worker(tmp_path, "ok.sh", 0)
+        bad = self._worker(tmp_path, "bad.sh", 3)
+        result = subprocess.run(
+            ["bash", str(PACK_SCRIPT), ok, "a", "b c", "::", bad, "x", "::", ok, "z"],
+            capture_output=True,
+            text=True,
+        )
+        calls = (tmp_path / "calls.log").read_text().splitlines()
+        assert calls == ["ok.sh a b c", "bad.sh x", "ok.sh z"]
+        assert result.returncode == 1
+        assert "2/3 runs succeeded" in result.stdout
+        assert "Failed run 2" in result.stderr
+
+    def test_succeeds_when_all_workers_succeed(self, tmp_path):
+        ok = self._worker(tmp_path, "ok.sh", 0)
+        result = subprocess.run(
+            ["bash", str(PACK_SCRIPT), ok, "1", "::", ok, "2"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert "2/2 runs succeeded" in result.stdout

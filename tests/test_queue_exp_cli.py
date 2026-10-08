@@ -14,6 +14,7 @@ from scripts.experiments.queue_exp import (
     format_plan_summary,
     main,
     submit_jobs,
+    submit_packs,
 )
 from src.experiment_queue import STM_IMAGE, create_queue_plan
 
@@ -379,3 +380,183 @@ class TestSubmissionAndMain:
         assert exit_code == 0
         captured = capsys.readouterr().out
         assert "Aborted." in captured
+
+
+def _fed_split_plan(runs: str) -> object:
+    return create_queue_plan(
+        raw_datasets="fed",
+        raw_models="baseline",
+        raw_excludes=None,
+        raw_runs=runs,
+        split=True,
+        use_stemmed=False,
+        keep_rep_stopwords=False,
+        dry_run=False,
+    )
+
+
+class FakeSlurm:
+    """Stands in for squeue and sbatch, holding a queue of `held` jobs."""
+
+    def __init__(self, held: int, refusals: list[str] | None = None):
+        self.held = held
+        self.refusals = list(refusals or [])
+        self.submitted: list[list[str]] = []
+
+    def __call__(self, cmd, **kwargs):
+        if cmd[0] == "squeue":
+            stdout = "".join(f"{i}\n" for i in range(self.held))
+            return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+        if self.refusals:
+            raise subprocess.CalledProcessError(
+                1, cmd, output="", stderr=self.refusals.pop(0)
+            )
+        self.submitted.append(cmd)
+        self.held += 1
+        return subprocess.CompletedProcess(
+            cmd, 0, stdout=f"Submitted batch job {len(self.submitted)}\n", stderr=""
+        )
+
+
+class TestQueueThrottling:
+    """Submission waits for free queue slots under the QOS submit limit."""
+
+    def test_waits_while_queue_is_full(self, capsys):
+        slurm = FakeSlurm(held=10)
+        sleeps: list[float] = []
+
+        def sleeper(seconds):
+            sleeps.append(seconds)
+            slurm.held -= 1  # a job finishes during each wait
+
+        failed = submit_jobs(
+            _fed_split_plan("1..3"),
+            worker_script="w.sh",
+            runner=slurm,
+            max_queued=10,
+            poll_seconds=5,
+            sleeper=sleeper,
+        )
+        assert failed == []
+        assert len(slurm.submitted) == 3
+        # Each job waits for one slot to free up, as the queue stays full.
+        assert sleeps == [5, 5, 5]
+        assert "Queue full (10/10 jobs)" in capsys.readouterr().out
+
+    def test_no_wait_below_limit(self):
+        slurm = FakeSlurm(held=0)
+        sleeper = MagicMock()
+        submit_jobs(
+            _fed_split_plan("1..3"),
+            worker_script="w.sh",
+            runner=slurm,
+            max_queued=10,
+            sleeper=sleeper,
+        )
+        assert len(slurm.submitted) == 3
+        sleeper.assert_not_called()
+
+    def test_retries_job_refused_for_submit_limit(self):
+        slurm = FakeSlurm(
+            held=0,
+            refusals=["sbatch: error: QOSMaxSubmitJobPerUserLimit"],
+        )
+        sleeper = MagicMock()
+        failed = submit_jobs(
+            _fed_split_plan("1..2"),
+            worker_script="w.sh",
+            runner=slurm,
+            sleeper=sleeper,
+        )
+        assert failed == []
+        assert len(slurm.submitted) == 2
+        sleeper.assert_called_once()
+
+    def test_other_refusals_are_reported_and_skipped(self, capsys):
+        slurm = FakeSlurm(held=0, refusals=["sbatch: error: Invalid partition"])
+        failed = submit_jobs(
+            _fed_split_plan("1..2"),
+            worker_script="w.sh",
+            runner=slurm,
+            sleeper=MagicMock(),
+        )
+        assert failed == ["fed_baseline_m1"]
+        assert len(slurm.submitted) == 1
+        assert "1 of 2 jobs dispatched" in capsys.readouterr().out
+
+    def test_max_queued_args(self):
+        args = build_parser().parse_args([])
+        assert args.max_queued == 10
+        assert args.poll_seconds == 60
+        args = build_parser().parse_args(["--max-queued", "0", "--poll-seconds", "5"])
+        assert args.max_queued == 0
+        assert args.poll_seconds == 5
+
+
+class TestPackedSubmission:
+    """--pack submits several runs as one SLURM job through the pack script."""
+
+    def test_pack_arg(self):
+        assert build_parser().parse_args([]).pack == 1
+        assert build_parser().parse_args(["-p", "4"]).pack == 4
+        assert build_parser().parse_args(["--pack", "3"]).pack == 3
+
+    def test_submit_packs_sends_one_sbatch_per_pack(self, capsys):
+        plan = create_queue_plan(
+            raw_datasets="fed",
+            raw_models="baseline",
+            raw_excludes=None,
+            raw_runs="1..5",
+            split=True,
+            use_stemmed=False,
+            keep_rep_stopwords=False,
+            pack_size=2,
+        )
+        slurm = FakeSlurm(held=0)
+        failed = submit_packs(
+            plan,
+            worker_script="w.sh",
+            stm_worker_script="s.sh",
+            pack_script="pack.sh",
+            runner=slurm,
+            max_queued=10,
+            sleeper=MagicMock(),
+        )
+        assert failed == []
+        assert len(slurm.submitted) == 3
+        first = slurm.submitted[0]
+        assert first[first.index("pack.sh") + 1 :] == [
+            "w.sh", "fed", "fed/fed_standard_baseline", "--remove-rep-stopwords", "1",
+            "::",
+            "w.sh", "fed", "fed/fed_standard_baseline", "--remove-rep-stopwords", "2",
+        ]  # fmt: skip
+        out = capsys.readouterr().out
+        assert "[1/3] Queuing job fed_baseline_m1+1 (2 in sequence)" in out
+        assert "    - Dataset: fed | Model: baseline | Run: #2" in out
+        assert "All 3 jobs (5 runs) have been dispatched to the scheduler." in out
+
+    def test_main_dry_run_with_pack(self, capsys):
+        exit_code = main(
+            ["-d", "fed", "-e", "baseline,mv_k_means,k_means", "-p", "2", "-n"]
+        )
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert (
+            "Packing:      up to 2 jobs in sequence per SLURM job (2 SLURM jobs)"
+        ) in out
+        assert (
+            "[1/2] [DRY RUN] Job: fed_baseline+1 (2 in sequence) | Mem: 32G | "
+            "CPUs: 4 | Time: 2-00:00:00"
+        ) in out
+        assert "Dry run complete (2 jobs simulated, 3 runs)." in out
+
+    def test_main_list_with_pack(self, capsys):
+        exit_code = main(["-d", "fed", "-e", "baseline,k_means", "-p", "2", "-l"])
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "SLURM job 1: fed_baseline+1 | Mem: 32G | CPUs: 4" in out
+        assert "   - Dataset: fed (Config dir: fed) | Model: k_means (All runs)" in out
+
+    def test_main_rejects_invalid_pack(self, capsys):
+        assert main(["-d", "fed", "-m", "baseline", "-p", "0", "-n"]) == 1
+        assert "--pack must be at least 1" in capsys.readouterr().err

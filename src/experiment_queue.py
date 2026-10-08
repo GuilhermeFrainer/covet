@@ -4,7 +4,8 @@ This module provides pure and unit-testable experiment-queue logic, including:
 - parsing run and model index specifications (e.g., 1..15, 1-5, 1,2,5);
 - resolving datasets and models (including categories and substring expansion);
 - applying model exclusions;
-- constructing the job list for SLURM submission (split vs standard).
+- constructing the job list for SLURM submission (split vs standard);
+- packing several jobs into one SLURM job that runs them in sequence.
 """
 
 from __future__ import annotations
@@ -33,6 +34,11 @@ STM_MEM = "16G"
 STM_CPUS = 1
 STM_TIME = "24:00:00"
 STM_IMAGE = "cast:stm-lite-v0.2.0"
+
+# Separates the worker invocations slurm_pack_job.sh runs in sequence.
+PACK_SEPARATOR = "::"
+
+_MEM_UNITS_MB = {"K": 1 / 1024, "M": 1, "G": 1024, "T": 1024 * 1024}
 
 ALL_MODELS = (
     "aligned_umap",
@@ -81,6 +87,78 @@ def stm_input_prefix(dataset: str, use_stemmed: bool) -> str:
     """
     base = "yelp_s10000" if dataset == "yelp" else dataset
     return f"{base}_stemmed" if use_stemmed else base
+
+
+def parse_time_limit(value: str) -> int:
+    """Converts a SLURM time limit to seconds.
+
+    Accepts the sbatch formats MM, MM:SS, HH:MM:SS, D-HH, D-HH:MM and
+    D-HH:MM:SS.
+
+    Raises:
+        ValueError: If the value is not a SLURM time limit.
+    """
+    text = value.strip()
+    try:
+        days = 0
+        clock = text
+        if "-" in text:
+            day_part, clock = text.split("-", 1)
+            days = int(day_part)
+        parts = [int(p) for p in clock.split(":")]
+        if not 1 <= len(parts) <= 3:
+            raise ValueError
+        if "-" in text:
+            hours, minutes, seconds = parts + [0] * (3 - len(parts))
+        elif len(parts) == 3:
+            hours, minutes, seconds = parts
+        else:
+            hours = 0
+            minutes, seconds = parts + [0] * (2 - len(parts))
+    except ValueError:
+        raise ValueError(f"Error: Invalid SLURM time limit '{value}'.") from None
+    return ((days * 24 + hours) * 60 + minutes) * 60 + seconds
+
+
+def format_time_limit(seconds: int) -> str:
+    """Formats seconds as a SLURM time limit (D-HH:MM:SS or HH:MM:SS)."""
+    days, rest = divmod(seconds, 86400)
+    hours, rest = divmod(rest, 3600)
+    minutes, secs = divmod(rest, 60)
+    clock = f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{days}-{clock}" if days else clock
+
+
+def parse_mem(value: str) -> float:
+    """Converts a SLURM memory request such as 32G or 16000 to megabytes.
+
+    Raises:
+        ValueError: If the value is not a SLURM memory request.
+    """
+    match = re.fullmatch(r"([0-9]+)([KMGT]?)B?", value.strip(), re.IGNORECASE)
+    if not match:
+        raise ValueError(f"Error: Invalid SLURM memory request '{value}'.")
+    return int(match.group(1)) * _MEM_UNITS_MB[(match.group(2) or "M").upper()]
+
+
+def _sbatch_args(
+    job_name: str, mem: str, cpus: int, time_limit: str, reservation: str | None
+) -> list[str]:
+    """Constructs the sbatch CLI options shared by single and packed jobs."""
+    args = [
+        f"--job-name={job_name}",
+        "--partition=cidia",
+        "--nodes=1",
+        "--ntasks=1",
+        f"--mem={mem}",
+        f"--cpus-per-task={cpus}",
+        f"--time={time_limit}",
+        "--output=slurm_log/%x_%j.out",
+        "--error=slurm_log/%x_%j.err",
+    ]
+    if reservation:
+        args.append(f"--reservation={reservation}")
+    return args
 
 
 def count_config_runs(exp_target: str) -> int:
@@ -179,20 +257,9 @@ class SlurmJobConfig:
     @property
     def sbatch_args(self) -> list[str]:
         """Construct the list of sbatch CLI options for this job."""
-        args = [
-            f"--job-name={self.job_name}",
-            "--partition=cidia",
-            "--nodes=1",
-            "--ntasks=1",
-            f"--mem={self.mem}",
-            f"--cpus-per-task={self.cpus}",
-            f"--time={self.time_limit}",
-            "--output=slurm_log/%x_%j.out",
-            "--error=slurm_log/%x_%j.err",
-        ]
-        if self.reservation:
-            args.append(f"--reservation={self.reservation}")
-        return args
+        return _sbatch_args(
+            self.job_name, self.mem, self.cpus, self.time_limit, self.reservation
+        )
 
     @property
     def worker_args(self) -> list[str]:
@@ -211,6 +278,102 @@ class SlurmJobConfig:
         """Construct the complete sbatch command invocation."""
         return ["sbatch", *self.sbatch_args, worker_script_path, *self.worker_args]
 
+    def worker_command(
+        self, worker_script_path: str, stm_worker_script_path: str
+    ) -> list[str]:
+        """Construct this job's worker invocation inside a packed job."""
+        script = stm_worker_script_path if self.is_stm else worker_script_path
+        return [script, *self.worker_args]
+
+
+@dataclass(frozen=True)
+class SlurmPackConfig:
+    """Several jobs that one SLURM job runs one after another.
+
+    The packed job requests the largest memory and CPU count among its
+    members, so each member gets at least what it would have alone.
+    """
+
+    jobs: tuple[SlurmJobConfig, ...]
+    time_limit: str
+
+    @property
+    def job_name(self) -> str:
+        """Return the first member's name, suffixed with the others' count."""
+        first = self.jobs[0].job_name
+        return f"{first}+{len(self.jobs) - 1}" if len(self.jobs) > 1 else first
+
+    @property
+    def mem(self) -> str:
+        """Return the largest memory request among the members."""
+        return max((job.mem for job in self.jobs), key=parse_mem)
+
+    @property
+    def cpus(self) -> int:
+        """Return the largest CPU request among the members."""
+        return max(job.cpus for job in self.jobs)
+
+    @property
+    def reservation(self) -> str | None:
+        """Return the reservation the members share."""
+        return self.jobs[0].reservation
+
+    @property
+    def sbatch_args(self) -> list[str]:
+        """Construct the list of sbatch CLI options for the packed job."""
+        return _sbatch_args(
+            self.job_name, self.mem, self.cpus, self.time_limit, self.reservation
+        )
+
+    def full_sbatch_command(
+        self,
+        pack_script_path: str,
+        worker_script_path: str,
+        stm_worker_script_path: str,
+    ) -> list[str]:
+        """Construct the sbatch command that runs every member in sequence."""
+        command = ["sbatch", *self.sbatch_args, pack_script_path]
+        for i, job in enumerate(self.jobs):
+            if i:
+                command.append(PACK_SEPARATOR)
+            command.extend(
+                job.worker_command(worker_script_path, stm_worker_script_path)
+            )
+        return command
+
+
+def pack_jobs(
+    jobs: list[SlurmJobConfig] | tuple[SlurmJobConfig, ...],
+    pack_size: int,
+    time_limit: str | None = None,
+) -> list[SlurmPackConfig]:
+    """Groups consecutive jobs into packs of at most `pack_size` members.
+
+    Args:
+        jobs: Jobs in submission order.
+        pack_size: Maximum number of jobs per pack.
+        time_limit: Time limit of each packed job; None sums the members'.
+
+    Returns:
+        Packs in submission order.
+
+    Raises:
+        ValueError: If `pack_size` is below 1 or `time_limit` is invalid.
+    """
+    if pack_size < 1:
+        raise ValueError("Error: --pack must be at least 1.")
+    if time_limit is not None:
+        parse_time_limit(time_limit)
+
+    packs: list[SlurmPackConfig] = []
+    for start in range(0, len(jobs), pack_size):
+        members = tuple(jobs[start : start + pack_size])
+        limit = time_limit or format_time_limit(
+            sum(parse_time_limit(job.time_limit) for job in members)
+        )
+        packs.append(SlurmPackConfig(jobs=members, time_limit=limit))
+    return packs
+
 
 @dataclass(frozen=True)
 class QueuePlan:
@@ -226,11 +389,17 @@ class QueuePlan:
     dry_run: bool
     jobs: tuple[SlurmJobConfig, ...]
     reservation: str | None = None
+    packs: tuple[SlurmPackConfig, ...] = ()
 
     @property
     def total_jobs(self) -> int:
-        """Return the total number of jobs to be submitted."""
+        """Return the total number of jobs (runs) in the plan."""
         return len(self.jobs)
+
+    @property
+    def total_submissions(self) -> int:
+        """Return the number of SLURM jobs sbatch receives."""
+        return len(self.packs) if self.packs else len(self.jobs)
 
 
 def parse_run_indices(raw_runs: str | None) -> list[int]:
@@ -553,6 +722,7 @@ def create_queue_plan(
     allow_empty_datasets: bool = False,
     raw_exact_models: str | None = None,
     reservation: str | None = None,
+    pack_size: int = 1,
 ) -> QueuePlan:
     """Create a fully resolved QueuePlan.
 
@@ -573,6 +743,9 @@ def create_queue_plan(
         allow_empty_datasets: For internal testing of dataset validation.
         raw_exact_models: User-specified exact model names.
         reservation: Optional SLURM reservation name.
+        pack_size: Jobs per SLURM job, run in sequence; 1 disables packing.
+            When packing, `time_limit` applies to each packed job, and None
+            sums its members' default limits.
 
     Returns:
         Resolved QueuePlan.
@@ -612,10 +785,11 @@ def create_queue_plan(
         keep_rep_stopwords=keep_rep_stopwords,
         mem=mem,
         cpus=cpus,
-        time_limit=time_limit,
+        time_limit=None if pack_size > 1 else time_limit,
         project_name=project_name,
         reservation=clean_reservation,
     )
+    packs = pack_jobs(jobs, pack_size, time_limit) if pack_size != 1 else []
 
     return QueuePlan(
         datasets=tuple(datasets),
@@ -628,4 +802,5 @@ def create_queue_plan(
         dry_run=dry_run,
         jobs=tuple(jobs),
         reservation=clean_reservation,
+        packs=tuple(packs),
     )
