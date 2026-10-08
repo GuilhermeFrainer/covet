@@ -86,6 +86,8 @@ def test_to_latex_labels_trump_sample_and_groups_sections(chunked_embeddings):
     stats = summarize_dataset(chunked_embeddings, raw_docs=None, covariates=7)
     latex = to_latex(build_table({"trump_s25000": stats}), ["Note."])
 
+    # Full width: five dataset columns do not fit one ACL column.
+    assert latex.startswith(r"\begin{table*}") and r"\end{table*}" in latex
     assert r"\small" in latex
     assert r"\fontsize" not in latex
     assert r" & Trump \\" in latex

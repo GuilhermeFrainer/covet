@@ -217,7 +217,7 @@ def to_latex(table: pl.DataFrame, notes: list[str]) -> str:
     dataset_cols = [c for c in table.columns if c not in ("Section", "Statistic")]
     n_cols = len(dataset_cols) + 1
     lines = [
-        r"\begin{table}[!t]",
+        r"\begin{table*}[!t]",
         r"\small",
         r"\centering",
         rf"\begin{{tabular}}{{l{'r' * len(dataset_cols)}}}",
@@ -237,7 +237,7 @@ def to_latex(table: pl.DataFrame, notes: list[str]) -> str:
     lines += [r"\bottomrule", r"\end{tabular}"]
     if notes:
         lines.append(r"\par\smallskip\footnotesize " + " ".join(notes))
-    lines.append(r"\end{table}")
+    lines.append(r"\end{table*}")
     return "\n".join(lines) + "\n"
 
 
