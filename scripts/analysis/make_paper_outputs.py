@@ -5,6 +5,10 @@ Writes, under --output-dir (default ~/Downloads/covet_paper_outputs):
     tables/pairwise_ablation_appendix.tex  T1 for the appendix metrics
     tables/pairwise_ablation_stats.tex     rank-biserial r and Holm-adjusted p
     tables/pairwise_ablation.csv           the same numbers, for inspection
+    tables/benchmark.tex                   T2: free-for-all (mean, Friedman rank)
+    tables/benchmark_appendix.tex          T2 for the appendix metrics
+    tables/benchmark.csv                   T2 per model
+    tables/benchmark_datasets.csv          T2 per model and dataset
     figures/tradeoff.{pdf,png}             Δ coherence vs Δ IRBO per dataset
     figures/dose_response.{pdf,png}        weighted Append: Δ against metadata weight
 
@@ -24,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src import paper_outputs  # noqa: E402
+from src import paper_benchmark, paper_outputs  # noqa: E402
 from src.comparisons.analysis import TRUMP_VARIANTS, use_trump_variant  # noqa: E402
 from src.model_catalog import load_catalog  # noqa: E402
 
@@ -112,6 +116,44 @@ def main():
     tables_dir.mkdir(parents=True, exist_ok=True)
     table.write_csv(tables_dir / "pairwise_ablation.csv")
     written.append(tables_dir / "pairwise_ablation.csv")
+
+    benchmark_models = paper_benchmark.load_benchmark_models()
+    sources = {s for model in benchmark_models for s in model["sources"]}
+    benchmark_preliminary = paper_outputs.is_preliminary(results, sources)
+    flagged.append(benchmark_preliminary)
+    all_metrics = paper_outputs.TABLE_METRICS + paper_outputs.APPENDIX_METRICS
+    scores = paper_benchmark.dataset_scores(results, benchmark_models, all_metrics)
+    for name, metrics, label in (
+        ("benchmark", paper_outputs.TABLE_METRICS, "tab:benchmark"),
+        (
+            "benchmark_appendix",
+            paper_outputs.APPENDIX_METRICS,
+            "tab:benchmark_appendix",
+        ),
+    ):
+        benchmark, stats = paper_benchmark.benchmark_table(
+            scores, benchmark_models, metrics
+        )
+        written.append(
+            paper_outputs.write_text(
+                tables_dir / f"{name}.tex",
+                paper_benchmark.benchmark_table_latex(
+                    benchmark,
+                    stats,
+                    catalog,
+                    metrics,
+                    preliminary=benchmark_preliminary,
+                    label=label,
+                    note=note,
+                ),
+            )
+        )
+    benchmark, _ = paper_benchmark.benchmark_table(
+        scores, benchmark_models, all_metrics
+    )
+    benchmark.write_csv(tables_dir / "benchmark.csv")
+    scores.write_csv(tables_dir / "benchmark_datasets.csv")
+    written += [tables_dir / "benchmark.csv", tables_dir / "benchmark_datasets.csv"]
 
     points = paper_outputs.tradeoff_points(
         datasets, catalog, args.coherence, args.diversity

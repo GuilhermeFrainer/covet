@@ -1,0 +1,17 @@
+# Models in the paper's free-for-all comparison (T2), in table order.
+# `id` is a catalog model (config/model_catalog.yaml). Optional `sources`
+# lists catalog models whose runs may stand in for it, tried in order per
+# dataset (FastTriTopic reproduces TriTopic exactly).
+# Models with complete runs on every benchmark dataset are ranked; the others
+# are shown with their means and marked as unranked.
+schema_version: 1
+models:
+  - id: baseline
+  - id: tritopic
+    sources: [tritopic, fast_tritopic]
+  - id: stm
+  - id: append_umap
+  - id: append_umap_w010
+  - id: aligned_umap
+  - id: mv_hdbscan
+  - id: mv_co_reg_spectral

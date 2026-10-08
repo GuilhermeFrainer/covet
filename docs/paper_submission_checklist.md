@@ -35,7 +35,7 @@ It follows on from [paper_results_plan.md](paper_results_plan.md), whose finding
 
 All outputs come from `uv run python scripts/analysis/make_paper_outputs.py` (Trump-25k by default), written to `~/Downloads/covet_paper_outputs/`, so the later re-runs only mean re-running it.
 
-- [ ] **Free-for-all model list in config** (one file, easy to edit), read by the generator.
+- [x] **Free-for-all model list in config**: [config/paper_benchmark.yaml](../config/paper_benchmark.yaml), read by the generator.
 - [x] **T1 – Pairwise ablations** (main text, `table*`): `tables/pairwise_ablation.tex`; appendix metrics in `pairwise_ablation_appendix.tex`, r and Holm p in `pairwise_ablation_stats.tex`
   - [x] Rows: HDBSCAN family (BERTopic₁ → COVET$_\text{Ap}$, COVET$_\text{Ap}^{w}$, COVET$_\text{Al}$, COVET$_\text{MH}$, COVET$_\text{FS}$) and spectral family (UMAP + Spectral → COVET$_\text{CR}$, COVET$_\text{CT}$)
   - [x] Holm families: one per metric, 7 tests each
@@ -43,11 +43,11 @@ All outputs come from `uv run python scripts/analysis/make_paper_outputs.py` (Tr
   - [x] Extra columns: Δ realized topics, Δ noise share, ΔAMI (marked † where AMI covers fewer datasets)
   - [x] Stats merged in: Holm p in the main table; rank-biserial r in the stats table
   - [x] Show each row's dataset count and mark incomplete rows (until the [missing runs](#missing-runs) are in: COVET$_\text{Ap}^{w}$ 3, COVET$_\text{MH}$ 4, COVET$_\text{FS}$ 4, COVET$_\text{CT}$ 4)
-- [ ] **T2 – Free-for-all** (main text, single column)
-  - [ ] Mean score and average Friedman rank per metric
-  - [ ] Iman–Davenport p and Kendall's W per metric; no post-hoc pairwise tests
-  - [ ] Realized topic count column
-  - [ ] Includes STM automatically once its results are merged
+- [x] **T2 – Free-for-all** (main text, single column): `tables/benchmark.tex`; appendix metrics in `benchmark_appendix.tex`; per-dataset scores in `benchmark_datasets.csv`
+  - [x] Mean score and average Friedman rank per metric (only models complete on all 5 datasets are ranked; the others are marked)
+  - [x] Iman–Davenport p and Kendall's W per metric; no post-hoc pairwise tests
+  - [x] Realized topic count column (not available for TriTopic)
+  - [ ] Includes STM automatically once its results are merged (check that its requested K is read from `n_topics`, `nr_topics` or `n_clusters`)
 - [ ] **F1 – Metadata alignment** (main text): dose-response figure, Δ metrics and AMI against w
 - [ ] **T3 – Noise coverage** (appendix): presented HDBSCAN models only; drop "Mean noise docs"
 - [ ] **T4 – Qualitative example**: keep `fed_qualitative_example_v3`
