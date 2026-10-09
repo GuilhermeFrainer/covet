@@ -8,25 +8,30 @@
 # Left out on purpose: the original TriTopic (FastTriTopic reproduces it
 # about 15x faster) and MV Spectral on Fed and Yelp (days per model).
 #
-# Run it inside tmux, because each batch keeps submitting until all its jobs
-# are in SLURM. It works from any directory (logs/ and the SLURM logs land in
-# the current one), e.g. from ~/slurm on the cluster:
+# On the cluster, copy it to ~/slurm/scripts/overnight.sh and run it from
+# ~/slurm, so logs/ and the SLURM logs land there; the queue comes from the
+# repository in ~/ca_bertopic. Run it inside tmux, because each batch keeps
+# submitting until all its jobs are in SLURM:
 #   tmux new -s overnight
 #   cd ~/slurm
-#   bash ~/ca_bertopic/scripts/pipelines/slurm/overnight_2026-10-08.sh 2>&1 | tee -a logs/overnight_2026-10-08.log
+#   bash scripts/overnight.sh 2>&1 | tee -a logs/overnight.log
 # Detach with Ctrl-b d; reattach with: tmux attach -t overnight
 #
 # Extra arguments go to every batch; preview everything first with:
-#   bash scripts/pipelines/slurm/overnight_2026-10-08.sh --dry-run
+#   bash scripts/overnight.sh --dry-run
 # Jobs run in the reservation res-gdsfrainer-cidia; RESERVATION= overrides it.
 # To resume after stopping it, FROM skips the batches before that number
 # (already submitted batches would otherwise be submitted twice):
-#   FROM=3 bash scripts/pipelines/slurm/overnight_2026-10-08.sh
+#   FROM=3 bash scripts/overnight.sh
 
 set -uo pipefail
 
-# The queue wrapper next to this script, wherever the script is run from.
-QUEUE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/queue_exp.sh"
+# The queue wrapper in the repository (~/ca_bertopic on the cluster); off the
+# cluster, the copy next to this script.
+QUEUE="$HOME/${PROJECT_NAME:-ca_bertopic}/scripts/pipelines/slurm/queue_exp.sh"
+if [ ! -f "$QUEUE" ]; then
+    QUEUE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/queue_exp.sh"
+fi
 RESERVATION="${RESERVATION:-res-gdsfrainer-cidia}"
 EXTRA=(--reservation "$RESERVATION" "$@")
 FROM="${FROM:-1}"
