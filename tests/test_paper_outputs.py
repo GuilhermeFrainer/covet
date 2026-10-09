@@ -111,7 +111,7 @@ def test_latex_tables_use_paper_notation(comparison):
     assert row in main
     assert "$n$" not in main
     stats = paper_outputs.ablation_stats_latex(table, CATALOG, metrics=metrics)
-    assert "With 2 datasets the smallest attainable two-sided $p$ is $0.5$" in stats
+    assert "Wilcoxon" not in stats and "smallest attainable" not in stats
     assert "Preliminary" not in stats
 
 

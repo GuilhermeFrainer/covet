@@ -298,17 +298,6 @@ def _p_value(value) -> str:
     return "--" if value is None else f"{value:.2f}"
 
 
-def _min_p_sentence(table: pl.DataFrame) -> str:
-    tested = max((row["Datasets"] for row in table.to_dicts()), default=0)
-    if not tested:
-        return ""
-    return (
-        f"With {tested} datasets the smallest attainable two-sided $p$ is "
-        f"${2 / 2**tested:.4g}$, so the tests summarize cross-dataset "
-        r"consistency rather than confirm effects."
-    )
-
-
 def ablation_table_latex(
     table: pl.DataFrame,
     catalog: dict,
@@ -370,12 +359,9 @@ def ablation_table_latex(
         r"Planned comparisons of each \systemshort variant with its reference, "
         r"averaged over datasets (each dataset averages 3 seeds $\times$ 5 "
         r"requested topic counts). Positive $\Delta$ favours the variant; "
-        r"wins/ties/losses across datasets in parentheses. $p$: exact two-sided "
-        r"Wilcoxon signed-rank $p$, Holm-adjusted within each metric across "
-        r"the comparisons in this table. "
-        + _min_p_sentence(table)
-        + r" $\Delta K$ (realized topics), $\Delta$ noise (share of documents "
-        r"in the noise cluster, percentage points) and $\Delta$ AMI "
+        r"wins/ties/losses across datasets in parentheses. $\Delta K$ (realized "
+        r"topics), $\Delta$ noise (share of documents in the noise cluster, "
+        r"percentage points) and $\Delta$ AMI "
         r"(topic--metadata alignment) are variant minus reference."
     )
     caption += weight_note(table["Model ID"].to_list(), catalog)
@@ -434,8 +420,8 @@ def ablation_stats_latex(
             )
         body.append(" & ".join(cells) + r" \\")
     caption = (
-        r"Rank-biserial correlation $r$ and, in parentheses, Holm-adjusted exact "
-        r"Wilcoxon signed-rank $p$ across datasets. " + _min_p_sentence(table)
+        r"Rank-biserial correlation $r$ and, in parentheses, $p$ across "
+        r"datasets."
     )
     if note:
         caption += " " + _latex_escape(note)
