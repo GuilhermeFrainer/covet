@@ -16,16 +16,28 @@
 #
 # Extra arguments go to every batch; preview everything first with:
 #   bash scripts/pipelines/slurm/overnight_2026-10-08.sh --dry-run
+# Jobs run in the reservation res-gdsfrainer-cidia; RESERVATION= overrides it.
+# To resume after stopping it, FROM skips the batches before that number
+# (already submitted batches would otherwise be submitted twice):
+#   FROM=3 bash scripts/pipelines/slurm/overnight_2026-10-08.sh
 
 set -uo pipefail
 
 QUEUE=scripts/pipelines/slurm/queue_exp.sh
-EXTRA=("$@")
+RESERVATION="${RESERVATION:-res-gdsfrainer-cidia}"
+EXTRA=(--reservation "$RESERVATION" "$@")
+FROM="${FROM:-1}"
+N=0
 mkdir -p logs
 
 # Submits one batch; a failed batch is reported and the next one still runs.
 batch() {
-    echo "=== $(date '+%F %T') queue_exp.sh $*"
+    N=$((N + 1))
+    if [ "$N" -lt "$FROM" ]; then
+        echo "--- skipping batch $N (FROM=$FROM): queue_exp.sh $*"
+        return
+    fi
+    echo "=== $(date '+%F %T') batch $N: queue_exp.sh $* ${EXTRA[*]}"
     bash "$QUEUE" "$@" "${EXTRA[@]}" -y || echo "!!! $(date '+%F %T') batch failed: $*"
 }
 
