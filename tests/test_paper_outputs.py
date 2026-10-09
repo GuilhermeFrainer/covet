@@ -107,8 +107,9 @@ def test_latex_tables_use_paper_notation(comparison):
     assert "C_v" not in main
     assert r"\textbf{Preliminary.}" in main and main.startswith("% Generated")
     assert r"\textit{vs.} $\text{BERTopic}_\text{H}$" in main
-    row = r"$\text{\systemshort}_\text{Ap}$ & 2 & $+0.020$\,{\scriptsize(2/0/0)}"
+    row = r"$\text{\systemshort}_\text{Ap}$ & $+0.020$\,{\scriptsize(2/0/0)}"
     assert row in main
+    assert "$n$" not in main
     stats = paper_outputs.ablation_stats_latex(table, CATALOG, metrics=metrics)
     assert "With 2 datasets the smallest attainable two-sided $p$ is $0.5$" in stats
     assert "Preliminary" not in stats

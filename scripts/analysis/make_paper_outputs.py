@@ -4,13 +4,9 @@ Writes, under --output-dir (default ~/Downloads/covet_paper_outputs):
     tables/pairwise_ablation.tex           T1: planned comparisons (Δ, W/T/L, Holm p)
     tables/pairwise_ablation_appendix.tex  T1 for the appendix metrics
     tables/pairwise_ablation_stats.tex     rank-biserial r and Holm-adjusted p
-    tables/pairwise_ablation.csv           the same numbers, for inspection
     tables/benchmark.tex                   T2: free-for-all (mean, Friedman rank)
     tables/benchmark_appendix.tex          T2 for the appendix metrics
-    tables/benchmark.csv                   T2 per model
-    tables/benchmark_datasets.csv          T2 per model and dataset
     tables/noise_coverage.tex              T3: noise share per HDBSCAN model and dataset
-    tables/noise_coverage.csv              the same numbers, for inspection
     tables/model_ablations.tex             presented models and their references
     figures/tradeoff.{pdf,png}             Δ coherence vs Δ IRBO per dataset
     figures/dose_response.{pdf,png}        weighted Append: Δ against metadata weight
@@ -121,9 +117,6 @@ def main():
             ),
         ),
     ]
-    tables_dir.mkdir(parents=True, exist_ok=True)
-    table.write_csv(tables_dir / "pairwise_ablation.csv")
-    written.append(tables_dir / "pairwise_ablation.csv")
 
     benchmark_models = paper_benchmark.load_benchmark_models()
     sources = {s for model in benchmark_models for s in model["sources"]}
@@ -164,12 +157,6 @@ def main():
                 ),
             )
         )
-    benchmark, _ = paper_benchmark.benchmark_table(
-        scores, benchmark_models, all_metrics
-    )
-    benchmark.write_csv(tables_dir / "benchmark.csv")
-    scores.write_csv(tables_dir / "benchmark_datasets.csv")
-    written += [tables_dir / "benchmark.csv", tables_dir / "benchmark_datasets.csv"]
 
     noise_preliminary = paper_outputs.is_preliminary(results, paper_noise.NOISE_MODELS)
     flagged.append(noise_preliminary)
@@ -182,8 +169,6 @@ def main():
             ),
         )
     )
-    coverage.write_csv(tables_dir / "noise_coverage.csv")
-    written.append(tables_dir / "noise_coverage.csv")
 
     # Presented models: each reference ahead of its variants, then the
     # external baselines of the free-for-all comparison.

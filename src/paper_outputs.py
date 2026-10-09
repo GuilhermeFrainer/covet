@@ -322,17 +322,17 @@ def ablation_table_latex(
     Per metric: mean Δ with W/T/L, and the Holm-adjusted exact Wilcoxon p.
     Then Δ realized topics, Δ noise share (HDBSCAN family only) and ΔAMI.
     """
-    n_columns = 2 + 2 * len(metrics) + 3
+    n_columns = 1 + 2 * len(metrics) + 3
     header_top = " & ".join(
-        ["", ""]
+        [""]
         + [rf"\multicolumn{{2}}{{c}}{{{_latex_metric(m)}}}" for m in metrics]
         + ["", "", ""]
     )
     rules = " ".join(
-        rf"\cmidrule(lr){{{3 + 2 * i}-{4 + 2 * i}}}" for i in range(len(metrics))
+        rf"\cmidrule(lr){{{2 + 2 * i}-{3 + 2 * i}}}" for i in range(len(metrics))
     )
     header = " & ".join(
-        [r"\textbf{Model}", "$n$"]
+        [r"\textbf{Model}"]
         + [r"$\Delta$", "$p$"] * len(metrics)
         + [r"$\Delta K$", r"$\Delta$ noise", r"$\Delta$ AMI"]
     )
@@ -348,7 +348,7 @@ def ablation_table_latex(
                 rf"\multicolumn{{{n_columns}}}{{l}}{{\textit{{vs.}} "
                 rf"{paper_label(reference, catalog)}}} \\"
             )
-        cells = [paper_label(row["Model ID"], catalog), str(row["Datasets"])]
+        cells = [paper_label(row["Model ID"], catalog)]
         for metric in metrics:
             wtl = row[f"{metric} W/T/L"]
             cells.append(
@@ -370,10 +370,9 @@ def ablation_table_latex(
         r"Planned comparisons of each \systemshort variant with its reference, "
         r"averaged over datasets (each dataset averages 3 seeds $\times$ 5 "
         r"requested topic counts). Positive $\Delta$ favours the variant; "
-        r"wins/ties/losses across datasets in parentheses; $n$ is the number of "
-        r"datasets with complete runs. $p$: exact two-sided Wilcoxon signed-rank "
-        r"$p$, "
-        r"Holm-adjusted within each metric across the comparisons in this table. "
+        r"wins/ties/losses across datasets in parentheses. $p$: exact two-sided "
+        r"Wilcoxon signed-rank $p$, Holm-adjusted within each metric across "
+        r"the comparisons in this table. "
         + _min_p_sentence(table)
         + r" $\Delta K$ (realized topics), $\Delta$ noise (share of documents "
         r"in the noise cluster, percentage points) and $\Delta$ AMI "
@@ -393,7 +392,7 @@ def ablation_table_latex(
         r"\centering",
         r"\small",
         r"\setlength{\tabcolsep}{3pt}",
-        rf"\begin{{tabular}}{{lc{'rc' * len(metrics)}rrr}}",
+        rf"\begin{{tabular}}{{l{'rc' * len(metrics)}rrr}}",
         r"\toprule",
         header_top + r" \\",
         rules,
