@@ -350,10 +350,9 @@ def benchmark_table_latex(
     tested = next((s for s in stats.values() if s), None)
     shown = {r["Model ID"] for r in table.to_dicts() if r["Datasets"]}
     caption = (
-        r"Free-for-all comparison. Mean score across datasets (each dataset "
-        r"averages 3 seeds $\times$ 5 requested topic counts"
-        + ("; STM: one run per topic count" if "stm" in shown else "")
-        + r") and, in parentheses, average rank (1 = best, best in bold)"
+        r"Free-for-all comparison. Mean score across datasets"
+        + (" (STM: one run per topic count)" if "stm" in shown else "")
+        + r" and, in parentheses, average rank (1 = best, best in bold)"
     )
     if tested:
         caption += (
