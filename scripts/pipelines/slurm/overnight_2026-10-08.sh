@@ -8,10 +8,12 @@
 # Left out on purpose: the original TriTopic (FastTriTopic reproduces it
 # about 15x faster) and MV Spectral on Fed and Yelp (days per model).
 #
-# Run from the repository root on the cluster, inside tmux, because each
-# batch keeps submitting until all its jobs are in SLURM:
+# Run it inside tmux, because each batch keeps submitting until all its jobs
+# are in SLURM. It works from any directory (logs/ and the SLURM logs land in
+# the current one), e.g. from ~/slurm on the cluster:
 #   tmux new -s overnight
-#   bash scripts/pipelines/slurm/overnight_2026-10-08.sh 2>&1 | tee -a logs/overnight_2026-10-08.log
+#   cd ~/slurm
+#   bash ~/ca_bertopic/scripts/pipelines/slurm/overnight_2026-10-08.sh 2>&1 | tee -a logs/overnight_2026-10-08.log
 # Detach with Ctrl-b d; reattach with: tmux attach -t overnight
 #
 # Extra arguments go to every batch; preview everything first with:
@@ -23,7 +25,8 @@
 
 set -uo pipefail
 
-QUEUE=scripts/pipelines/slurm/queue_exp.sh
+# The queue wrapper next to this script, wherever the script is run from.
+QUEUE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/queue_exp.sh"
 RESERVATION="${RESERVATION:-res-gdsfrainer-cidia}"
 EXTRA=(--reservation "$RESERVATION" "$@")
 FROM="${FROM:-1}"
