@@ -357,8 +357,7 @@ def ablation_table_latex(
         body.append(" & ".join(cells) + r" \\")
     caption = (
         r"Planned comparisons of each \systemshort variant with its reference, "
-        r"averaged over datasets (each dataset averages 3 seeds $\times$ 5 "
-        r"requested topic counts). Positive $\Delta$ favours the variant; "
+        r"averaged over datasets. Positive $\Delta$ favours the variant; "
         r"wins/ties/losses across datasets in parentheses. $\Delta K$ (realized "
         r"topics), $\Delta$ noise (share of documents in the noise cluster, "
         r"percentage points) and $\Delta$ AMI "
