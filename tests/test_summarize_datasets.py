@@ -84,7 +84,7 @@ def test_count_covariates_maps_sample_to_base_config(tmp_path):
 def test_to_latex_labels_trump_sample_and_groups_sections(chunked_embeddings):
     """The Trump sample is labeled "Trump" and sections get their own rows."""
     stats = summarize_dataset(chunked_embeddings, raw_docs=None, covariates=7)
-    latex = to_latex(build_table({"trump_s25000": stats}), ["Note."])
+    latex = to_latex(build_table({"trump_s25000": stats}))
 
     assert r"\label{tab:dataset_summary}" in latex and r"\caption{" in latex
     # Full width: five dataset columns do not fit one ACL column.
@@ -96,4 +96,4 @@ def test_to_latex_labels_trump_sample_and_groups_sections(chunked_embeddings):
     assert r"\textit{Documents}" in latex
     assert r"\textit{Chunks (model input)}" in latex
     assert r"Words & 11 \\" in latex
-    assert "Note." in latex
+    assert "random sample" not in latex

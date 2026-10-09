@@ -75,9 +75,6 @@ RAW_PATHS: dict[str, Path | None] = {
 # Covariate configs whose name differs from the dataset key.
 CONFIG_NAMES: dict[str, str] = {"yelp_s10000": "yelp"}
 
-# Samples drawn after preprocessing, described in a table note.
-SAMPLE_PARENTS: dict[str, str] = {"trump_s25000": "trump"}
-
 DOCUMENT_SECTION = "Documents"
 CHUNK_SECTION = "Chunks (model input)"
 
@@ -172,29 +169,6 @@ def summarize_dataset(
     }
 
 
-def sample_note(dataset_key: str, data_dir: Path = DATA_DIR) -> str | None:
-    """Describes a post-preprocessing sample relative to its parent corpus."""
-    parent = SAMPLE_PARENTS.get(dataset_key)
-    if parent is None:
-        return None
-
-    def count_documents(path: Path) -> int:
-        return (
-            pl.scan_parquet(path).select(pl.col(DOC_ID_COL).n_unique()).collect().item()
-        )
-
-    label = DATASET_LABELS.get(dataset_key, dataset_key)
-    sample_size = count_documents(data_dir / f"{dataset_key}_embeddings.parquet")
-    note = f"{label}: random sample of {sample_size:,}"
-    parent_path = data_dir / f"{parent}_embeddings.parquet"
-    if parent_path.exists():
-        note += f" of the {count_documents(parent_path):,} preprocessed documents"
-        raw_path = RAW_PATHS.get(parent)
-        if raw_path is not None and raw_path.exists():
-            note += f" ({count_rows(raw_path):,} raw)"
-    return note + "."
-
-
 def build_table(summaries: dict[str, dict[str, Any]]) -> pl.DataFrame:
     """Lays out formatted statistics, one row per statistic, one column per dataset."""
     return pl.DataFrame(
@@ -212,7 +186,7 @@ def build_table(summaries: dict[str, dict[str, Any]]) -> pl.DataFrame:
     )
 
 
-def to_latex(table: pl.DataFrame, notes: list[str]) -> str:
+def to_latex(table: pl.DataFrame) -> str:
     """Renders the summary table as a small booktabs LaTeX table."""
     dataset_cols = [c for c in table.columns if c not in ("Section", "Statistic")]
     n_cols = len(dataset_cols) + 1
@@ -235,8 +209,6 @@ def to_latex(table: pl.DataFrame, notes: list[str]) -> str:
         cells = [row["Statistic"], *(row[c] for c in dataset_cols)]
         lines.append(" & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
-    if notes:
-        lines.append(r"\par\smallskip\footnotesize " + " ".join(notes))
     lines += [
         r"\caption{Summary of the datasets. Document statistics count each "
         r"retained document once, before chunking; chunk statistics describe "
@@ -304,9 +276,8 @@ def main() -> None:
     ):
         print(table)
 
-    notes = [note for key in summaries if (note := sample_note(key))]
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(to_latex(table, notes), encoding="utf-8")
+    args.output.write_text(to_latex(table), encoding="utf-8")
     logger.info(f"LaTeX table saved to {args.output}")
 
 
