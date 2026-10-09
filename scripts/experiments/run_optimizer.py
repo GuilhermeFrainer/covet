@@ -26,7 +26,14 @@ LOG_DIR = PROJECT_ROOT / "logs"
 TABLES_DIR = PROJECT_ROOT / "tables"
 
 
-def main():
+def main() -> int:
+    """Runs one experiment config.
+
+    Returns:
+        0 if every run trained; 1 if the pipeline crashed or any run failed.
+        Failed runs are otherwise only logged, so SLURM would report the job
+        as completed.
+    """
     parser = argparse.ArgumentParser(description="Run a hyperparameter optimization.")
     parser.add_argument(
         "--exp",
@@ -280,6 +287,12 @@ def main():
         else:
             logger.warning("No results file found, skipping LaTeX table creation.")
 
+        failed = [m for m in optimizer.run_manifests if m.get("status") == "failure"]
+        if failed:
+            logger.error(f"{len(failed)} run(s) failed; see the errors above.")
+            return 1
+        return 0
+
     except Exception as e:
         if logger:
             logger.error(f"Pipeline crashed: {e}", exc_info=True)
@@ -287,7 +300,8 @@ def main():
             # If logger setup fails, print to stderr
             print(f"Pipeline crashed before logger was configured: {e}")
             traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
