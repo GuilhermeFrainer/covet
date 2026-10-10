@@ -80,6 +80,7 @@ Contains the batch dispatcher and experiment workers. Start experiment batches w
 Scripts for processing, evaluating, and compiling results.
 - **[find_best_models.py](../scripts/analysis/find_best_models.py)**: Scrapes results to identify the best model configurations per metric and generates plots/LaTeX tables.
 - **[merge_results.py](../scripts/analysis/merge_results.py)**: Consolidates and deduplicates results from individual experiment runs into merged files, with single-pass archiving and cleanup (see [merge_results_lifecycle.md](merge_results_lifecycle.md)).
+- **[archive_old_chunking.py](../scripts/analysis/archive_old_chunking.py)**: Moves the Fed and Yelp results trained on the old chunking (identified by their document count) out of the merged and raw result and topic files into `results/archive/` and `output/archive/`. Previews by default; `--apply` writes.
 - **[calculate_total_time.py](../scripts/analysis/calculate_total_time.py)**: Analyzes time metrics from logs to determine model throughput and compute times.
 - **[count_models.py](../scripts/analysis/count_models.py)**: Summarizes completed model files.
 - **[calculate_noise_coverage.py](../scripts/analysis/calculate_noise_coverage.py)**: Calculates HDBSCAN noise-cluster coverage and exports it as LaTeX.
