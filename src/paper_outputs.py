@@ -17,7 +17,11 @@ from pathlib import Path
 
 import polars as pl
 
-from src.comparisons.analysis import BENCHMARK_DATASETS, compute_ablation_comparisons
+from src.comparisons.analysis import (
+    BENCHMARK_DATASETS,
+    REQUESTED_TOPICS,
+    compute_ablation_comparisons,
+)
 from src.comparisons.views import METRIC_LABELS, STANDARD_CONDITION, model_name
 from src.evaluation import EVALUATION_PROTOCOL
 from src.experiment_tracker import classify_result_condition
@@ -161,6 +165,39 @@ def compare(results: pl.DataFrame, catalog: dict, variants) -> tuple:
     )
     summary = summary.filter(pl.col("Model ID").is_in(list(variants)))
     return datasets, summary
+
+
+def matched_runs(results: pl.DataFrame, catalog: dict, variants) -> pl.DataFrame:
+    """Seed x topic-count matched runs of `variants` against their references."""
+    _, _, runs = compute_ablation_comparisons(
+        results, catalog, summary_model_ids=set(variants)
+    )
+    if runs.is_empty():
+        return runs
+    return runs.filter(
+        pl.col("Model ID").is_in(list(variants))
+        & (pl.col("Condition") == STANDARD_CONDITION)
+    )
+
+
+def heatmap_cells(runs: pl.DataFrame, metric: str) -> pl.DataFrame:
+    """Seed-averaged Δ per variant x dataset x requested topic count.
+
+    As in the dashboard heatmap: Δ is improvement-oriented (proposed minus
+    reference for topic-metadata AMI).
+    """
+    if runs.is_empty():
+        return pl.DataFrame()
+    return (
+        runs.filter(
+            (pl.col("Metric") == metric) & pl.col("Improvement delta").is_not_null()
+        )
+        .group_by("Model ID", "Dataset", "Requested topics")
+        .agg(
+            pl.col("Improvement delta").mean().alias("Mean Δ"), pl.len().alias("Seeds")
+        )
+        .sort("Model ID", "Dataset", "Requested topics")
+    )
 
 
 def _complete(datasets: pl.DataFrame) -> pl.DataFrame:
@@ -487,7 +524,7 @@ def plot_tradeoff(
     variants=HDBSCAN_VARIANTS,
     catalog: dict | None = None,
     preliminary: bool = False,
-    formats=("pdf", "png"),
+    formats=("pdf",),
 ) -> list[Path]:
     """Scatter of Δ x vs Δ y: colour = proposed model, marker = dataset."""
     plt = _pyplot()
@@ -595,7 +632,7 @@ def plot_dose_response(
     curve: pl.DataFrame,
     path_stem: Path,
     preliminary: bool = False,
-    formats=("pdf", "png"),
+    formats=("pdf",),
 ) -> list[Path]:
     """2 × 2 panels of Δ against the metadata weight w, one line per dataset."""
     plt = _pyplot()
@@ -635,6 +672,98 @@ def plot_dose_response(
     if preliminary:
         fig.suptitle("Preliminary (pre-fix coherence)", fontsize=8, color="#B22222")
     fig.tight_layout(rect=(0, 0.05, 1, 0.97))
+    return _save(fig, plt, path_stem, formats)
+
+
+def plot_heatmap(
+    cells: pl.DataFrame,
+    metric: str,
+    path_stem: Path,
+    variants=PAIRWISE_VARIANTS,
+    catalog: dict | None = None,
+    preliminary: bool = False,
+    formats=("pdf",),
+) -> list[Path]:
+    """Comparisons x requested topics, one panel per dataset, coloured by Δ.
+
+    The paper version of the dashboard's RQ1 heatmap: blue favours the
+    proposed model, red the reference, on a scale symmetric around zero.
+    Cells without matched runs are hatched.
+    """
+    import numpy as np
+
+    plt = _pyplot()
+    catalog = catalog or {}
+    present = set(cells["Model ID"].to_list()) if not cells.is_empty() else set()
+    rows = [v for v in variants if v in present]
+    datasets = [
+        d
+        for d in BENCHMARK_DATASETS
+        if not cells.is_empty() and d in set(cells["Dataset"].to_list())
+    ]
+    values = {
+        (row["Model ID"], row["Dataset"], row["Requested topics"]): row["Mean Δ"]
+        for row in (cells.to_dicts() if not cells.is_empty() else [])
+    }
+    limit = max((abs(v) for v in values.values() if v is not None), default=0.0)
+    limit = max(limit, 1e-6)
+    cmap = plt.get_cmap("RdBu").copy()
+    # Missing cells show the hatched axes background.
+    cmap.set_bad((0, 0, 0, 0))
+
+    fig, axes = plt.subplots(
+        1,
+        max(len(datasets), 1),
+        figsize=(6.8, 0.75 + 0.24 * max(len(rows), 1)),
+        sharey=True,
+        squeeze=False,
+    )
+    image = None
+    for ax, dataset in zip(axes[0], datasets):
+        grid = np.array(
+            [
+                [values.get((v, dataset, k), np.nan) for k in REQUESTED_TOPICS]
+                for v in rows
+            ],
+            dtype=float,
+        )
+        image = ax.imshow(
+            np.ma.masked_invalid(grid),
+            cmap=cmap,
+            vmin=-limit,
+            vmax=limit,
+            aspect="auto",
+        )
+        ax.patch.set_facecolor("white")
+        ax.patch.set_edgecolor("#BBBBBB")
+        ax.patch.set_hatch("////")
+        ax.set_title(DATASET_LABELS.get(dataset, dataset), fontweight="bold")
+        ax.set_xticks(range(len(REQUESTED_TOPICS)), [str(k) for k in REQUESTED_TOPICS])
+        ax.set_xlabel("Requested topics", fontsize=7)
+        ax.tick_params(length=0, labelsize=7)
+        # White gridlines separate the cells.
+        ax.set_xticks(np.arange(-0.5, len(REQUESTED_TOPICS)), minor=True)
+        ax.set_yticks(np.arange(-0.5, len(rows)), minor=True)
+        ax.grid(which="minor", color="white", linewidth=0.8)
+        ax.tick_params(which="minor", length=0)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+    labels = []
+    for variant in rows:
+        label = figure_label(variant, catalog)
+        reference = catalog.get(variant, {}).get("baseline_id")
+        if reference:
+            label = f"{figure_label(reference, catalog)} → {label}"
+        labels.append(label)
+    axes[0][0].set_yticks(range(len(rows)), labels)
+    if image is not None:
+        bar = fig.colorbar(image, ax=axes[0].tolist(), fraction=0.025, pad=0.015)
+        bar.set_label(f"Δ {METRIC_LABELS.get(metric, metric)}", fontsize=7)
+        bar.ax.tick_params(labelsize=6)
+    if preliminary:
+        fig.suptitle(
+            "Preliminary (pre-fix coherence)", fontsize=8, color="#B22222", y=1.06
+        )
     return _save(fig, plt, path_stem, formats)
 
 

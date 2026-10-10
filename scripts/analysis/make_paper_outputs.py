@@ -8,8 +8,10 @@ Writes, under --output-dir (default ~/Downloads/covet_paper_outputs):
     tables/benchmark_appendix.tex          T2 for the appendix metrics
     tables/noise_coverage.tex              T3: noise share per HDBSCAN model and dataset
     tables/model_ablations.tex             presented models and their references
-    figures/tradeoff.{pdf,png}             Δ coherence vs Δ IRBO per dataset
-    figures/dose_response.{pdf,png}        weighted Append: Δ against metadata weight
+    figures/tradeoff.pdf                   Δ coherence vs Δ IRBO per dataset
+    figures/dose_response.pdf              weighted Append: Δ against metadata weight
+    figures/heatmap_<metric>.pdf           seed-averaged Δ per comparison, dataset and
+                                           requested topic count (as in the dashboard)
 
 Each output is marked preliminary while any result it uses was scored with an older
 evaluation protocol (see docs/paper_results_plan.md).
@@ -48,7 +50,13 @@ def main():
         default="irbo",
         help="y-axis metric of the trade-off figure",
     )
-    parser.add_argument("--formats", nargs="+", default=["pdf", "png"])
+    parser.add_argument(
+        "--heatmap-metrics",
+        nargs="+",
+        default=[*paper_outputs.TABLE_METRICS, "meta_ami_mean"],
+        help="one heatmap per metric",
+    )
+    parser.add_argument("--formats", nargs="+", default=["pdf"])
     parser.add_argument(
         "--trump",
         choices=list(TRUMP_VARIANTS),
@@ -203,6 +211,17 @@ def main():
         preliminary=preliminary,
         formats=args.formats,
     )
+
+    runs = paper_outputs.matched_runs(results, catalog, paper_outputs.PAIRWISE_VARIANTS)
+    for metric in args.heatmap_metrics:
+        written += paper_outputs.plot_heatmap(
+            paper_outputs.heatmap_cells(runs, metric),
+            metric,
+            figures_dir / f"heatmap_{metric}",
+            catalog=catalog,
+            preliminary=preliminary,
+            formats=args.formats,
+        )
 
     weighted = [model for model, _ in paper_outputs.WEIGHTED_APPEND]
     weighted_preliminary = paper_outputs.is_preliminary(

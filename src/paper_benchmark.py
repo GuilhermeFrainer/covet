@@ -360,8 +360,7 @@ def benchmark_table_latex(
             f"{tested['N']} datasets"
         )
     caption += (
-        r". $p$: Iman--Davenport test of "
-        r"equal average ranks; $W$: Kendall's coefficient of concordance. "
+        r". $p$: Iman--Davenport test; $W$: Kendall's $W$. "
         r"Pairwise differences are not tested here. $K$: mean realized number "
         r"of topics."
     )

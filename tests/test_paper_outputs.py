@@ -244,3 +244,21 @@ def test_weight_note_names_the_tables_weighted_append():
         r" $X^{w}$ uses $w = 0.1$."
     )
     assert paper_outputs.weight_note(["baseline"], catalog) == ""
+
+
+def test_heatmap_averages_seeds_per_topic_count(tmp_path):
+    runs = paper_outputs.matched_runs(_results(), CATALOG, ("append_umap",))
+    cells = paper_outputs.heatmap_cells(runs, "c_npmi")
+    assert cells.height == len(DATASETS) * len(REQUESTED_TOPICS)
+    assert cells["Mean Δ"].to_list() == pytest.approx([0.02] * cells.height)
+    assert set(cells["Seeds"].to_list()) == {len(SEEDS)}
+    written = paper_outputs.plot_heatmap(
+        cells,
+        "c_npmi",
+        tmp_path / "heatmap",
+        variants=("append_umap", "append_umap_w010"),
+        catalog=CATALOG,
+        preliminary=True,
+    )
+    assert [path.suffix for path in written] == [".pdf"]
+    assert written[0].stat().st_size > 0
