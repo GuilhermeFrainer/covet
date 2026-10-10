@@ -78,7 +78,11 @@ def main():
                 d_name, d_type = get_dataset_info(csv_file)
                 if d_name == dataset and d_type == r_type:
                     try:
-                        df = pl.read_csv(csv_file, infer_schema_length=None)
+                        # All strings: raw run files and merged files infer
+                        # different types for the same column (e.g. an empty
+                        # column as String in one, Int64 in another), which
+                        # makes the diagonal concat fail.
+                        df = pl.read_csv(csv_file, infer_schema_length=0)
                         matched_dfs.append(df)
                     except Exception:
                         pass

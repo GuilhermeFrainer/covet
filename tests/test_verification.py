@@ -196,3 +196,47 @@ def test_merge_files_aborts_on_partial_models(
     )
     assert ok_override
     assert out_csv.exists()
+
+
+def test_check_missing_results_reads_files_with_mixed_column_types(
+    tmp_path, monkeypatch, capsys
+):
+    """A column inferred as Int64 in one file and String in another still merges."""
+    import scripts.analysis.check_missing_results as cmr
+
+    results = tmp_path / "results"
+    results.mkdir()
+    pl.DataFrame(
+        {
+            "experiment_id": ["fed_standard_baseline"],
+            "model_name": ["baseline_1"],
+            "random_state": [36201624],
+            "n_clusters": [10],
+        }
+    ).write_csv(results / "fed_standard_merged.csv")
+    pl.DataFrame(
+        {
+            "experiment_id": ["fed_standard_baseline"],
+            "model_name": ["baseline_2"],
+            "random_state": [36201624],
+            "n_clusters": [""],
+        }
+    ).write_csv(results / "fed_standard_baseline_m2-20261009-120000-36201624.csv")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check_missing_results.py",
+            "--dataset",
+            "fed",
+            "--result-type",
+            "standard",
+            "--results-dir",
+            str(results),
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        cmr.main()
+
+    assert "baseline" in capsys.readouterr().out
