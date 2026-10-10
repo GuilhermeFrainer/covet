@@ -17,8 +17,8 @@ model:
     verbose: false
     keyword_ngram_range: [1, 1]
     n_topics:
-      - 10
+      - 8
+      - 11
+      - 14
+      - 17
       - 20
-      - 30
-      - 40
-      - 50

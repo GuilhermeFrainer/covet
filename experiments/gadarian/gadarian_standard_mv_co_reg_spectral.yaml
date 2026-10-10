@@ -24,8 +24,8 @@ model:
     type: "co_regularized_multi_view_spectral_clustering"
     params:
       n_clusters:
+        - 4
+        - 6
+        - 8
         - 10
-        - 20
-        - 30
-        - 40
-        - 50
+        - 12

@@ -8,18 +8,18 @@ experiment:
   prevalence_formula: '~ as.factor(party_id) + years_of_education + age + as.factor(party_id):age'
 
 models:
-  - id: "stm_k10"
+  - id: "stm_k8"
     parameters:
-      k: 10
+      k: 8
+  - id: "stm_k11"
+    parameters:
+      k: 11
+  - id: "stm_k14"
+    parameters:
+      k: 14
+  - id: "stm_k17"
+    parameters:
+      k: 17
   - id: "stm_k20"
     parameters:
       k: 20
-  - id: "stm_k30"
-    parameters:
-      k: 30
-  - id: "stm_k40"
-    parameters:
-      k: 40
-  - id: "stm_k50"
-    parameters:
-      k: 50

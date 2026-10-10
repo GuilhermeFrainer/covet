@@ -29,8 +29,8 @@ model:
   bertopic:
     params:
       nr_topics:
+        - 4
+        - 6
+        - 8
         - 10
-        - 20
-        - 30
-        - 40
-        - 50
+        - 12

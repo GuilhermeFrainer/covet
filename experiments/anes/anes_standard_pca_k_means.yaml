@@ -18,8 +18,8 @@ model:
     type: k_means
     params:
       n_clusters:
-      - 10
+      - 8
+      - 11
+      - 14
+      - 17
       - 20
-      - 30
-      - 40
-      - 50

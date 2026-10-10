@@ -25,8 +25,8 @@ model:
     params:
       n_init: 10
       n_clusters:
+        - 4
+        - 6
+        - 8
         - 10
-        - 20
-        - 30
-        - 40
-        - 50
+        - 12

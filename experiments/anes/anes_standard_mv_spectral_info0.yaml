@@ -25,8 +25,8 @@ model:
     params:
       info_view: 0
       n_clusters:
-        - 10
+        - 8
+        - 11
+        - 14
+        - 17
         - 20
-        - 30
-        - 40
-        - 50

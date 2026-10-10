@@ -24,8 +24,8 @@ model:
     type: "multi_view_k_means"
     params:
       n_clusters:
+        - 4
+        - 6
+        - 8
         - 10
-        - 20
-        - 30
-        - 40
-        - 50
+        - 12

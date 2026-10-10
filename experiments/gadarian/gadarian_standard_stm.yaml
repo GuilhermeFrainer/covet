@@ -8,18 +8,18 @@ experiment:
   prevalence_formula: '~ as.factor(treatment) + as.factor(partisanship) + as.factor(treatment):as.factor(partisanship)'
 
 models:
+  - id: "stm_k4"
+    parameters:
+      k: 4
+  - id: "stm_k6"
+    parameters:
+      k: 6
+  - id: "stm_k8"
+    parameters:
+      k: 8
   - id: "stm_k10"
     parameters:
       k: 10
-  - id: "stm_k20"
+  - id: "stm_k12"
     parameters:
-      k: 20
-  - id: "stm_k30"
-    parameters:
-      k: 30
-  - id: "stm_k40"
-    parameters:
-      k: 40
-  - id: "stm_k50"
-    parameters:
-      k: 50
+      k: 12
