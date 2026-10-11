@@ -19,7 +19,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import src.logger_config as logger_config
 from src.results_analysis import DATASET_ALIASES
-from src.verification import verify_dataset_completeness
+from src.topic_grids import requested_topics_expr
+from src.verification import RUN_INDEX_SUFFIX, verify_dataset_completeness
 
 LOG_DIR = PROJECT_ROOT / "logs"
 
@@ -255,11 +256,34 @@ def group_files(
     return grouped
 
 
+def run_key_expr(columns, name_column: str) -> pl.Expr:
+    """Identifies a run by its model and requested topic count.
+
+    Run names such as `baseline_2_seed36201624` carry the run's index in its
+    config grid, which changes when the grid does: run 2 requests 20 topics
+    on the common grid but 6 on Gadarian's own grid. Runs with a requested
+    topic count are therefore keyed by model and count (`baseline@k=20`), so
+    the runs of two grids are kept side by side and a rerun of the same
+    count replaces the older run. Runs without one keep their name.
+
+    This assumes the topic count is the only parameter a config varies, as
+    in every standard config.
+    """
+    requested = requested_topics_expr(columns)
+    name = pl.col(name_column).cast(pl.Utf8)
+    return (
+        pl.when(requested.is_not_null())
+        .then(pl.format("{}@k={}", name.str.replace(RUN_INDEX_SUFFIX, ""), requested))
+        .otherwise(name)
+    )
+
+
 def deduplicate_dataframe(df: pl.DataFrame, is_json: bool = False) -> pl.DataFrame:
     """Conservative deduplication: keeps the newer entry for each trial/model run.
 
-    For CSV: keeps latest row for (dataset_name, model_name/id, random_state).
-    For JSON: keeps all topics for latest (dataset_name, model_id, random_state).
+    For CSV: keeps latest row for (dataset_name, run, random_state).
+    For JSON: keeps all topics for latest (dataset_name, run, random_state).
+    A run is its model and requested topic count (see `run_key_expr`).
     Also removes duplicate rows across all columns.
     """
     if df.is_empty():
@@ -289,10 +313,15 @@ def deduplicate_dataframe(df: pl.DataFrame, is_json: bool = False) -> pl.DataFra
     run_key_cols = []
     if "dataset_name" in df.columns:
         run_key_cols.append("dataset_name")
-    for c in ["model_name", "model_id", "experiment_id"]:
-        if c in df.columns and c not in run_key_cols:
-            run_key_cols.append(c)
-            break
+    name_column = next(
+        (c for c in ["model_name", "model_id", "experiment_id"] if c in df.columns),
+        None,
+    )
+    if name_column:
+        df_with_ts = df_with_ts.with_columns(
+            run_key_expr(df.columns, name_column).alias("__run")
+        )
+        run_key_cols.append("__run")
     if "random_state" in df.columns:
         run_key_cols.append("random_state")
 
@@ -304,7 +333,7 @@ def deduplicate_dataframe(df: pl.DataFrame, is_json: bool = False) -> pl.DataFra
         deduped = (
             df_with_ts.sort("__norm_ts", descending=False, nulls_last=False)
             .unique(subset=run_key_cols, keep="last", maintain_order=True)
-            .drop("__norm_ts")
+            .drop("__norm_ts", "__run", strict=False)
         )
         return deduped
     else:
@@ -314,7 +343,7 @@ def deduplicate_dataframe(df: pl.DataFrame, is_json: bool = False) -> pl.DataFra
             df_with_ts.filter(
                 pl.col("__norm_ts") == pl.col("__norm_ts").max().over(run_key_cols)
             )
-            .drop("__norm_ts")
+            .drop("__norm_ts", "__run", strict=False)
             .unique(maintain_order=True)
         )
         return deduped
@@ -587,7 +616,8 @@ def archive_files(
         f"{file_list_str}\n\n"
         "Notes:\n"
         "------\n"
-        "- Only latest run per (experiment_id, random_state) kept during merge.\n"
+        "- Only latest file per (experiment_id, random_state) merged; of its rows,\n"
+        "  the latest run per (model, requested topic count, random_state) kept.\n"
         "- Identical duplicate rows deduplicated in final merged file.\n"
     )
 

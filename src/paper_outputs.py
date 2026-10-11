@@ -17,17 +17,14 @@ from pathlib import Path
 
 import polars as pl
 
-from src.comparisons.analysis import (
-    BENCHMARK_DATASETS,
-    REQUESTED_TOPICS,
-    compute_ablation_comparisons,
-)
+from src.comparisons.analysis import BENCHMARK_DATASETS, compute_ablation_comparisons
 from src.comparisons.views import METRIC_LABELS, STANDARD_CONDITION, model_name
 from src.evaluation import EVALUATION_PROTOCOL
 from src.experiment_tracker import classify_result_condition
 from src.metadata_alignment import fill_run_alignment, load_covariate_alignment
 from src.model_catalog import annotate_models, load_catalog
 from src.results_analysis import canonical_dataset_expr
+from src.topic_grids import DATASET_REQUESTED_TOPICS, DEFAULT_TOPIC_GRID, topic_grid
 
 # Planned pairwise comparisons (T1), each against its catalog reference.
 # Holm adjusts within each metric across these comparisons.
@@ -151,13 +148,16 @@ def documents_per_dataset(results: pl.DataFrame) -> dict[str, int]:
     return {row[0]: row[1] for row in sizes.iter_rows() if row[1]}
 
 
-def compare(results: pl.DataFrame, catalog: dict, variants) -> tuple:
+def compare(
+    results: pl.DataFrame, catalog: dict, variants, grid: str = DEFAULT_TOPIC_GRID
+) -> tuple:
     """Dataset-level and cross-dataset comparisons for `variants`.
 
-    Holm adjustment runs within each metric across `variants`.
+    Runs are matched on each dataset's topic `grid`. Holm adjustment runs
+    within each metric across `variants`.
     """
     datasets, summary, _ = compute_ablation_comparisons(
-        results, catalog, summary_model_ids=set(variants)
+        results, catalog, summary_model_ids=set(variants), grid=grid
     )
     datasets = datasets.filter(
         pl.col("Model ID").is_in(list(variants))
@@ -167,10 +167,12 @@ def compare(results: pl.DataFrame, catalog: dict, variants) -> tuple:
     return datasets, summary
 
 
-def matched_runs(results: pl.DataFrame, catalog: dict, variants) -> pl.DataFrame:
+def matched_runs(
+    results: pl.DataFrame, catalog: dict, variants, grid: str = DEFAULT_TOPIC_GRID
+) -> pl.DataFrame:
     """Seed x topic-count matched runs of `variants` against their references."""
     _, _, runs = compute_ablation_comparisons(
-        results, catalog, summary_model_ids=set(variants)
+        results, catalog, summary_model_ids=set(variants), grid=grid
     )
     if runs.is_empty():
         return runs
@@ -307,6 +309,26 @@ def figure_label(model_id: str, catalog: dict) -> str:
 # Weighted Append variant presented in the tables, and its weight. Its label
 # carries only "w", so captions state the value.
 TABLE_WEIGHTED_APPEND = ("append_umap_w010", 0.1)
+
+
+def topic_grid_note(grid: str = DEFAULT_TOPIC_GRID) -> str:
+    """Caption sentence naming the topic counts of datasets with their own grid.
+
+    Empty for the common grid, whose 10 to 50 topics the text states.
+    """
+    if grid == DEFAULT_TOPIC_GRID:
+        return ""
+    parts = []
+    for dataset in sorted(DATASET_REQUESTED_TOPICS):
+        counts = topic_grid(dataset, grid)
+        if counts != topic_grid(dataset):
+            parts.append(
+                f"{', '.join(map(str, counts[:-1]))} and {counts[-1]} on "
+                f"{DATASET_LABELS.get(dataset, dataset)}"
+            )
+    if not parts:
+        return ""
+    return f"Requested topic counts are {'; '.join(parts)}; 10 to 50 elsewhere."
 
 
 def weight_note(model_ids, catalog: dict) -> str:
@@ -683,12 +705,14 @@ def plot_heatmap(
     catalog: dict | None = None,
     preliminary: bool = False,
     formats=("pdf",),
+    grid: str = DEFAULT_TOPIC_GRID,
 ) -> list[Path]:
     """Comparisons x requested topics, one panel per dataset, coloured by Δ.
 
     The paper version of the dashboard's RQ1 heatmap: blue favours the
     proposed model, red the reference, on a scale symmetric around zero.
-    Cells without matched runs are hatched.
+    Each panel's columns are its dataset's topic counts under `grid`. Cells
+    without matched runs are hatched.
     """
     import numpy as np
 
@@ -720,15 +744,13 @@ def plot_heatmap(
     )
     image = None
     for ax, dataset in zip(axes[0], datasets):
-        grid = np.array(
-            [
-                [values.get((v, dataset, k), np.nan) for k in REQUESTED_TOPICS]
-                for v in rows
-            ],
+        counts = topic_grid(dataset, grid)
+        deltas = np.array(
+            [[values.get((v, dataset, k), np.nan) for k in counts] for v in rows],
             dtype=float,
         )
         image = ax.imshow(
-            np.ma.masked_invalid(grid),
+            np.ma.masked_invalid(deltas),
             cmap=cmap,
             vmin=-limit,
             vmax=limit,
@@ -738,11 +760,11 @@ def plot_heatmap(
         ax.patch.set_edgecolor("#BBBBBB")
         ax.patch.set_hatch("////")
         ax.set_title(DATASET_LABELS.get(dataset, dataset), fontweight="bold")
-        ax.set_xticks(range(len(REQUESTED_TOPICS)), [str(k) for k in REQUESTED_TOPICS])
+        ax.set_xticks(range(len(counts)), [str(k) for k in counts])
         ax.set_xlabel("Requested topics", fontsize=7)
         ax.tick_params(length=0, labelsize=7)
         # White gridlines separate the cells.
-        ax.set_xticks(np.arange(-0.5, len(REQUESTED_TOPICS)), minor=True)
+        ax.set_xticks(np.arange(-0.5, len(counts)), minor=True)
         ax.set_yticks(np.arange(-0.5, len(rows)), minor=True)
         ax.grid(which="minor", color="white", linewidth=0.8)
         ax.tick_params(which="minor", length=0)

@@ -7,10 +7,14 @@ from typing import Any, List, Optional
 import polars as pl
 
 import src.utils as utils
+from src.document_assignments import requested_topic_setting
 from src.optimizer import generate_hyperparameter_combinations
+from src.topic_grids import requested_topics_expr
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
+# Suffix the optimizer appends to a model id: `_<run index>[_seed<seed>]`.
+RUN_INDEX_SUFFIX = r"_\d+(?:_seed\d+)?$"
 
 
 @dataclass
@@ -181,6 +185,13 @@ def verify_dataset_completeness(
 
         combos = generate_hyperparameter_combinations(model_cfg)
         expected_runs = len(combos) * max(len(seeds), 1)
+        # Topic counts the config requests now; results may also hold runs of
+        # an earlier grid (see src/topic_grids.py), which do not count.
+        topic_counts = {
+            int(count)
+            for combo, _ in combos
+            if (count := requested_topic_setting(combo)) is not None
+        }
 
         found_runs = 0
         found_seeds: List[int] = []
@@ -189,8 +200,8 @@ def verify_dataset_completeness(
             conditions = []
             if "model_name" in df.columns:
                 conditions.append(
-                    (pl.col("model_name") == m_id)
-                    | pl.col("model_name").str.starts_with(f"{m_id}_")
+                    pl.col("model_name").cast(pl.Utf8).str.replace(RUN_INDEX_SUFFIX, "")
+                    == m_id
                 )
             if "experiment_id" in df.columns:
                 conditions.append(pl.col("experiment_id") == y.stem)
@@ -200,6 +211,11 @@ def verify_dataset_completeness(
                 for cond in conditions[1:]:
                     combined_cond = combined_cond | cond
                 sub = df.filter(combined_cond)
+                if topic_counts:
+                    requested = requested_topics_expr(sub.columns)
+                    sub = sub.filter(
+                        requested.is_null() | requested.is_in(sorted(topic_counts))
+                    )
             else:
                 sub = pl.DataFrame()
 

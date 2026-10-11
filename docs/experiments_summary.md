@@ -21,7 +21,7 @@ The benchmark spans five empirical datasets covering diverse document lengths, v
 
 ### 1.2 Seeds, Topic Configurations & Experimental Scale
 * **Random Seeds ($3$ fixed seeds)**: `36201624`, `62613654`, `57116123`.
-* **Topic Counts ($K$ / $nr\_topics$ / $n\_clusters$)**: $5$ evaluation blocks: **`10, 20, 30, 40, 50`** topics.
+* **Topic Counts ($K$ / $nr\_topics$ / $n\_clusters$)**: $5$ evaluation blocks: **`10, 20, 30, 40, 50`** topics. Since 2026-10-10, Gadarian and ANES are also run on dataset-specific grids (**`4, 6, 8, 10, 12`** and **`8, 11, 14, 17, 20`**): Gadarian's HDBSCAN models find only 11–16 topics, so larger counts repeated the same partition. Results of both grids are kept; analyses select one (see [src/topic_grids.py](../src/topic_grids.py)).
 * **Runs per Complete Configuration**: $3\text{ seeds} \times 5\text{ topic counts} = \mathbf{15\text{ runs}}$ per model.
 * **Text Embeddings**: Standardized dense semantic representations via `all-MiniLM-L6-v2` ($d=384$) generated in Python with strict row alignment.
 * **Benchmark Size** (as of 2026-09-15): Over **2,945 individual model evaluations** consolidated into merged result files, plus recent decoupled multi-view experimental runs.

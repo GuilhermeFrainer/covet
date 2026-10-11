@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from itertools import product
 import math
+from itertools import product
 from pathlib import Path
 
 import polars as pl
 import yaml
 
+# REQUESTED_TOPICS is re-exported for modules that import it from here.
+from src.topic_grids import DEFAULT_TOPIC_GRID, REQUESTED_TOPICS, topic_grid  # noqa: F401
+
 SEEDS = (36201624, 62613654, 57116123)
-REQUESTED_TOPICS = (10, 20, 30, 40, 50)
 BENCHMARK_DATASETS = ("anes", "fed", "gadarian", "trump", "yelp")
 QUALITY_METRICS = ("c_v", "c_npmi", "u_mass", "irbo", "topic_diversity")
 # Topic–metadata AMI is tested as a change (variant minus reference), not as an
@@ -190,16 +192,20 @@ def _deduplicate_runs(df):
 
 
 def compute_ablation_comparisons(
-    df: pl.DataFrame, catalog: dict, summary_model_ids=None, requested_topics=None
+    df: pl.DataFrame,
+    catalog: dict,
+    summary_model_ids=None,
+    requested_topics=None,
+    grid: str = DEFAULT_TOPIC_GRID,
 ):
     """Build dataset-level deltas and cross-dataset tests for registered pairs.
 
     The dashboard intentionally presents all preprocessing conditions separately.
     Inferential tests use the documented standard condition and the seed x
-    requested-topic grid: all of `REQUESTED_TOPICS` by default, or only the
-    counts in `requested_topics` (an exploratory slice).
+    requested-topic grid of each dataset under `grid` (see `topic_grids`), or
+    only its counts in `requested_topics` (an exploratory slice). A dataset
+    whose grid has none of the sliced counts is left out.
     """
-    topic_grid = tuple(requested_topics) if requested_topics else REQUESTED_TOPICS
     cells, ambiguous = _deduplicate_runs(df)
     dataset_rows = []
     run_rows = []
@@ -221,9 +227,21 @@ def compute_ablation_comparisons(
         for condition in conditions:
             if condition in {"standard", "remove_rep_stopwords"} and ablation_id in inference_ids:
                 standard_seen.add(ablation_id)
+            tested = (
+                condition in {"standard", "remove_rep_stopwords"}
+                and ablation_id in inference_ids
+            )
             pair_dataset_deltas = {metric: [] for metric in INFERENTIAL_METRICS}
             for dataset in datasets:
-                expected = {(seed, count) for seed in SEEDS for count in topic_grid}
+                counts = topic_grid(dataset, grid)
+                if requested_topics:
+                    counts = tuple(c for c in counts if c in requested_topics)
+                if not counts:
+                    if tested:
+                        for metric in INFERENTIAL_METRICS:
+                            pair_dataset_deltas[metric].append(None)
+                    continue
+                expected = {(seed, count) for seed in SEEDS for count in counts}
                 metric_diffs = {metric: [] for metric in (*INFERENTIAL_METRICS, "n_topics")}
                 baseline_scores = {metric: [] for metric in metric_diffs}
                 variant_scores = {metric: [] for metric in metric_diffs}
@@ -292,14 +310,14 @@ def compute_ablation_comparisons(
                         "Coverage": f"{len(deltas)}/{expected_count}", "Status": metric_status,
                         "Provenance": "sample/config parity not fully verifiable from merged result rows",
                     })
-                if condition in {"standard", "remove_rep_stopwords"} and ablation_id in inference_ids:
+                if tested:
                     for metric in INFERENTIAL_METRICS:
                         if matched == expected_count and len(metric_diffs[metric]) == expected_count:
                             pair_dataset_deltas[metric].append(metric_diffs[metric])
                         else:
                             pair_dataset_deltas[metric].append(None)
 
-            if condition in {"standard", "remove_rep_stopwords"} and ablation_id in inference_ids:
+            if tested:
                 for metric in INFERENTIAL_METRICS:
                     dataset_deltas = pair_dataset_deltas[metric]
                     # Keep dataset-level deltas in rows above; inference is cross-dataset only.
@@ -367,7 +385,7 @@ def compute_ablation_comparisons(
                             "Holm adjusted p": None,
                             "Inference status": (
                                 "descriptive only: fewer than two datasets have a "
-                                f"complete {len(SEEDS) * len(topic_grid)}-cell grid"
+                                "complete seed x topic-count grid"
                             ),
                         })
 
@@ -421,11 +439,16 @@ def compute_ablation_comparisons(
 
 
 def compute_registered_edge_comparisons(
-    df: pl.DataFrame, catalog: dict, edges: list[dict], requested_topics=None
+    df: pl.DataFrame,
+    catalog: dict,
+    edges: list[dict],
+    requested_topics=None,
+    grid: str = DEFAULT_TOPIC_GRID,
 ):
     """Compute results for explicit directed edges, including adjacent variants.
 
-    `requested_topics` restricts the grid as in `compute_ablation_comparisons`.
+    `requested_topics` and `grid` select the topic counts as in
+    `compute_ablation_comparisons`.
     """
     dataset_rows = []
     summary_rows = []
@@ -445,6 +468,7 @@ def compute_registered_edge_comparisons(
             edge_catalog,
             summary_model_ids={variant_id},
             requested_topics=requested_topics,
+            grid=grid,
         )
         if not dataset_frame.is_empty():
             dataset_rows.extend(

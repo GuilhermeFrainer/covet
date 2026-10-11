@@ -170,3 +170,28 @@ def test_benchmark_config_names_catalog_models():
     for model in paper_benchmark.load_benchmark_models():
         assert model["id"] in catalog
         assert all(source in catalog for source in model["sources"])
+
+
+def test_dataset_grid_scores_gadarian_on_its_own_topic_counts():
+    rows = [
+        {
+            "catalog_id": "baseline",
+            "dataset_label": "gadarian",
+            "condition": "remove_rep_stopwords",
+            "source_file": "gadarian_standard_merged",
+            "random_state": seed,
+            "nr_topics": k,
+            "c_npmi": k / 100,
+            "n_topics": k - 1,
+        }
+        for seed in SEEDS
+        for k in (4, 6, 8, 10, 12, 20, 30, 40, 50)
+    ]
+    models = [{"id": "baseline", "sources": ["baseline"]}]
+    for grid, mean in (("common", 0.3), ("dataset", 0.08)):
+        scores = paper_benchmark.dataset_scores(
+            pl.DataFrame(rows), models, ["c_npmi"], grid=grid
+        )
+        row = scores.row(0, named=True)
+        assert row["Complete"] and row["Runs"] == 15
+        assert row["c_npmi"] == pytest.approx(mean)

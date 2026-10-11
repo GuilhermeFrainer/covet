@@ -240,3 +240,57 @@ def test_check_missing_results_reads_files_with_mixed_column_types(
         cmr.main()
 
     assert "baseline" in capsys.readouterr().out
+
+
+def test_verify_completeness_counts_only_the_configs_topic_counts(
+    mock_experiments_dir,
+):
+    # Model A requests 10 and 20 topics; runs of an earlier grid do not count.
+    df = pl.DataFrame(
+        {
+            "dataset_name": ["testds"] * 6,
+            "model_name": [
+                "model_a_1_seed101",
+                "model_a_2_seed101",
+                "model_a_3_seed101",
+                "model_a_1_seed102",
+                "model_a_2_seed102",
+                "model_a_3_seed102",
+            ],
+            "random_state": [101, 101, 101, 102, 102, 102],
+            "nr_topics": [10, 30, 40, 10, 30, 40],
+            "c_v": [0.6] * 6,
+        }
+    )
+
+    report = verify_dataset_completeness(
+        dataset_name="testds",
+        dataset_type="standard",
+        df=df,
+        experiments_dir=mock_experiments_dir,
+    )
+
+    partial = report.partial_models[0]
+    assert partial.model_name == "model_a"
+    assert (partial.found_runs, partial.expected_runs) == (2, 4)
+
+
+def test_verify_completeness_ignores_models_sharing_a_prefix(mock_experiments_dir):
+    # `model_a_w` runs start with "model_a_" but belong to another model.
+    df = pl.DataFrame(
+        {
+            "dataset_name": ["testds"] * 2,
+            "model_name": ["model_a_w_1_seed101", "model_a_w_1_seed102"],
+            "random_state": [101, 102],
+            "c_v": [0.6, 0.6],
+        }
+    )
+
+    report = verify_dataset_completeness(
+        dataset_name="testds",
+        dataset_type="standard",
+        df=df,
+        experiments_dir=mock_experiments_dir,
+    )
+
+    assert "model_a" in [m.model_name for m in report.unrun_models]

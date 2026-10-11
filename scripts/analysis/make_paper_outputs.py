@@ -16,8 +16,13 @@ Writes, under --output-dir (default ~/Downloads/covet_paper_outputs):
 Each output is marked preliminary while any result it uses was scored with an older
 evaluation protocol (see docs/paper_results_plan.md).
 
+--topic-grid chooses the requested topic counts runs are matched on: "common" (10 to
+50 on every dataset) or "dataset" (each dataset's own grid, see src/topic_grids.py).
+Non-default choices of --topic-grid and --trump write to subfolders of --output-dir.
+
 Usage:
     uv run python scripts/analysis/make_paper_outputs.py
+    uv run python scripts/analysis/make_paper_outputs.py --topic-grid dataset
     uv run python scripts/analysis/make_paper_outputs.py --output-dir out/ --formats pdf
 """
 
@@ -35,6 +40,7 @@ from src import paper_benchmark, paper_noise, paper_outputs  # noqa: E402
 from src.comparisons.analysis import TRUMP_VARIANTS, use_trump_variant  # noqa: E402
 from src.make_table import generate_model_ablation_latex_table  # noqa: E402
 from src.model_catalog import load_catalog  # noqa: E402
+from src.topic_grids import DEFAULT_TOPIC_GRID, TOPIC_GRIDS  # noqa: E402
 
 DEFAULT_OUTPUT = Path.home() / "Downloads" / "covet_paper_outputs"
 
@@ -64,24 +70,33 @@ def main():
         help="Trump corpus counted as the fifth dataset (default: the 25k sample). "
         "Non-default choices write to a subfolder of --output-dir.",
     )
+    parser.add_argument(
+        "--topic-grid",
+        choices=list(TOPIC_GRIDS),
+        default=DEFAULT_TOPIC_GRID,
+        help="requested topic counts to match runs on: 'common' (10 to 50 on every "
+        "dataset) or 'dataset' (each dataset's own grid). Non-default choices write "
+        "to a subfolder of --output-dir.",
+    )
     args = parser.parse_args()
+    grid = args.topic_grid
 
     catalog = load_catalog()
     results = use_trump_variant(paper_outputs.load_results(PROJECT_ROOT), args.trump)
     documents = paper_outputs.documents_per_dataset(results)
-    output_dir = (
-        args.output_dir
-        if args.trump == "trump_s25000"
-        else args.output_dir / args.trump
-    )
+    output_dir = args.output_dir
+    if args.trump != "trump_s25000":
+        output_dir = output_dir / args.trump
+    if grid != DEFAULT_TOPIC_GRID:
+        output_dir = output_dir / f"{grid}_topic_grid"
     tables_dir, figures_dir = output_dir / "tables", output_dir / "figures"
-    # The paper's Trump dataset is the 25k sample, stated in the text; only a
-    # non-default choice is named in the captions.
-    note = (
-        ""
-        if args.trump == "trump_s25000"
-        else f"Trump results use the {TRUMP_VARIANTS[args.trump]}."
-    )
+    # The paper's Trump dataset is the 25k sample and its topic counts are 10
+    # to 50, stated in the text; only non-default choices are named in the
+    # captions.
+    notes = [paper_outputs.topic_grid_note(grid)]
+    if args.trump != "trump_s25000":
+        notes.append(f"Trump results use the {TRUMP_VARIANTS[args.trump]}.")
+    note = " ".join(n for n in notes if n)
 
     pairwise_models = {
         *paper_outputs.PAIRWISE_VARIANTS,
@@ -90,7 +105,7 @@ def main():
     preliminary = paper_outputs.is_preliminary(results, pairwise_models)
     flagged = [preliminary]
     datasets, summary = paper_outputs.compare(
-        results, catalog, paper_outputs.PAIRWISE_VARIANTS
+        results, catalog, paper_outputs.PAIRWISE_VARIANTS, grid
     )
     table = paper_outputs.ablation_table(
         datasets,
@@ -138,7 +153,7 @@ def main():
         )["run_uid"].to_list()
     )
     scores = paper_benchmark.dataset_scores(
-        results, benchmark_models, all_metrics, realized
+        results, benchmark_models, all_metrics, realized, grid
     )
     for name, metrics, label in (
         ("benchmark", paper_outputs.TABLE_METRICS, "tab:benchmark"),
@@ -168,7 +183,7 @@ def main():
 
     noise_preliminary = paper_outputs.is_preliminary(results, paper_noise.NOISE_MODELS)
     flagged.append(noise_preliminary)
-    coverage = paper_noise.noise_coverage(results)
+    coverage = paper_noise.noise_coverage(results, grid=grid)
     written.append(
         paper_outputs.write_text(
             tables_dir / "noise_coverage.tex",
@@ -212,7 +227,9 @@ def main():
         formats=args.formats,
     )
 
-    runs = paper_outputs.matched_runs(results, catalog, paper_outputs.PAIRWISE_VARIANTS)
+    runs = paper_outputs.matched_runs(
+        results, catalog, paper_outputs.PAIRWISE_VARIANTS, grid
+    )
     for metric in args.heatmap_metrics:
         written += paper_outputs.plot_heatmap(
             paper_outputs.heatmap_cells(runs, metric),
@@ -221,6 +238,7 @@ def main():
             catalog=catalog,
             preliminary=preliminary,
             formats=args.formats,
+            grid=grid,
         )
 
     weighted = [model for model, _ in paper_outputs.WEIGHTED_APPEND]
@@ -228,7 +246,7 @@ def main():
         results, [*weighted, "baseline"]
     )
     flagged.append(weighted_preliminary)
-    weighted_datasets, _ = paper_outputs.compare(results, catalog, weighted)
+    weighted_datasets, _ = paper_outputs.compare(results, catalog, weighted, grid)
     curve = paper_outputs.dose_response(weighted_datasets, documents)
     written += paper_outputs.plot_dose_response(
         curve,

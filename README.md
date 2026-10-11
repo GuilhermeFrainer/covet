@@ -206,6 +206,8 @@ This script performs single-pass consolidation:
 - Pools all contributing and superseded raw run files into timestamped ZIP archives (`results/archive/` and `output/archive/`).
 - Deletes unmerged raw files from disk, avoiding orphaned artifacts.
 
+Runs are matched by model, requested topic count and seed. Gadarian and ANES have results on two topic-count grids, the common 10–50 and their own (see [src/topic_grids.py](src/topic_grids.py)); both are kept. The paper outputs (`scripts/analysis/make_paper_outputs.py --topic-grid common|dataset`) and the dashboard select one.
+
 ### Scraping Best Models & Generating LaTeX Tables
 
 To extract top-performing models per metric and generate publication-ready LaTeX tables:
@@ -247,6 +249,7 @@ uv run streamlit run scripts/dashboard.py
 
 The dashboard enables:
 *   Filtering by dataset, model type, date, and preprocessing regime (`standard`, `stemmed`, `no_stopword_removal`).
+*   Switching between the common and dataset-specific topic-count grids (sidebar); every tab shows the selected grid's runs.
 *   Direct comparison across coherence (`c_v`, `u_mass`), diversity (`irbo`), and outlier metrics.
 *   Interactive scatter plots and automated highlighting of best models.
 *   Topic–metadata alignment (`meta_ami_mean`): per-covariate AMI heatmaps, run-level distributions, and variant-minus-reference deltas in the RQ1 ablation view. AMI is descriptive and never highlighted as "best"; older runs are filled from the backfill under `results/derived/`.

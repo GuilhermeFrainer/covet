@@ -23,6 +23,16 @@ import altair as alt
 import polars as pl
 import streamlit as st
 
+from src.comparisons import views as comparison_views
+from src.comparisons.analysis import (
+    BENCHMARK_DATASETS,
+    INFERENTIAL_METRICS,
+    TRUMP_VARIANTS,
+    compute_ablation_comparisons,
+    compute_registered_edge_comparisons,
+    load_rq1_edges,
+    use_trump_variant,
+)
 from src.experiment_tracker import (
     DEFAULT_SLURM_SCRIPT_CLUSTER,
     DEFAULT_SLURM_SCRIPT_LOCAL,
@@ -60,17 +70,6 @@ from src.model_catalog import (
     load_catalog,
     sort_catalog,
 )
-from src.comparisons import views as comparison_views
-from src.comparisons.analysis import (
-    BENCHMARK_DATASETS,
-    INFERENTIAL_METRICS,
-    REQUESTED_TOPICS,
-    TRUMP_VARIANTS,
-    compute_ablation_comparisons,
-    compute_registered_edge_comparisons,
-    load_rq1_edges,
-    use_trump_variant,
-)
 from src.results_analysis import (
     calculate_hdbscan_noise_coverage,
     canonical_dataset_expr,
@@ -79,6 +78,13 @@ from src.results_analysis import (
     compute_stopword_impact,
     extract_model_type,
     find_best_models,
+)
+from src.topic_grids import (
+    DEFAULT_TOPIC_GRID,
+    TOPIC_GRIDS,
+    grid_topic_counts,
+    in_topic_grid,
+    topic_grid,
 )
 
 TABLES_DIR = PROJECT_ROOT / "tables"
@@ -728,7 +734,9 @@ def render_rq1_cross_dataset(
     st.caption(caption)
 
 
-def render_rq1_single_dataset(edges, catalog, edge_runs, metric, dataset, topic_slice):
+def render_rq1_single_dataset(
+    edges, catalog, edge_runs, metric, dataset, topic_slice, grid=DEFAULT_TOPIC_GRID
+):
     """Descriptive views for one dataset; no cross-dataset test applies."""
     metric_label = comparison_views.METRIC_LABELS.get(metric, metric)
     descriptive_columns = {
@@ -750,7 +758,7 @@ def render_rq1_single_dataset(edges, catalog, edge_runs, metric, dataset, topic_
             base = alt.Chart(alt.Data(values=trend.to_dicts())).encode(
                 x=alt.X(
                     "Requested topics:O",
-                    sort=list(REQUESTED_TOPICS),
+                    sort=list(topic_grid(dataset, grid)),
                     axis=alt.Axis(labelAngle=0),
                 ),
                 color=alt.Color(
@@ -807,7 +815,9 @@ def render_rq1_single_dataset(edges, catalog, edge_runs, metric, dataset, topic_
         )
 
 
-def render_rq1_heatmap(edges, catalog, edge_runs, metric, dataset, topic_slice):
+def render_rq1_heatmap(
+    edges, catalog, edge_runs, metric, dataset, topic_slice, grid=DEFAULT_TOPIC_GRID
+):
     """Seed-averaged Δ for every comparison × dataset × requested topic count."""
     metric_label = comparison_views.METRIC_LABELS.get(metric, metric)
     cells = comparison_views.heatmap_cells(edges, catalog, edge_runs, metric)
@@ -834,7 +844,7 @@ def render_rq1_heatmap(edges, catalog, edge_runs, metric, dataset, topic_slice):
     base = alt.Chart().encode(
         x=alt.X(
             "Requested topics:O",
-            sort=list(REQUESTED_TOPICS),
+            sort=grid_topic_counts(BENCHMARK_DATASETS, grid),
             title="Requested topics",
             axis=alt.Axis(labelAngle=0, labelFontSize=11),
         ),
@@ -883,6 +893,8 @@ def render_rq1_heatmap(edges, catalog, edge_runs, metric, dataset, topic_slice):
             ),
             spacing=8,
         )
+        # Each panel shows only its dataset's topic counts.
+        .resolve_scale(x="independent")
     )
     st.altair_chart(chart)
     st.caption(
@@ -921,6 +933,17 @@ def main():
     except (ValueError, OSError) as exc:
         st.error(f"Cannot load model catalog: {exc}")
         return
+    st.sidebar.header("Requested Topic Counts")
+    grid = st.sidebar.selectbox(
+        "Topic grid",
+        list(TOPIC_GRIDS),
+        format_func=TOPIC_GRIDS.get,
+        key="topic_grid",
+        help="Gadarian and ANES were run on two topic-count grids. Every tab "
+        "shows only the runs of the selected grid; other datasets are unaffected.",
+    )
+    df = in_topic_grid(df, grid)
+    qual_df = in_topic_grid(qual_df, grid)
     all_results = annotate_models(df, catalog)
     qual_df = annotate_models(qual_df, catalog)
     st.sidebar.header("Experiment Organization")
@@ -1214,24 +1237,36 @@ def main():
                 [all_datasets_label, *BENCHMARK_DATASETS],
                 key="rq1_dataset",
             )
+        rq1_dataset = None if dataset_choice == all_datasets_label else dataset_choice
         with scope_topics:
             topics_choice = st.selectbox(
                 "Requested topics:",
-                [all_topics_label, *REQUESTED_TOPICS],
+                [
+                    all_topics_label,
+                    *grid_topic_counts(
+                        [rq1_dataset] if rq1_dataset else BENCHMARK_DATASETS, grid
+                    ),
+                ],
                 key="rq1_topics",
+                help="A count off a dataset's grid leaves that dataset out.",
             )
-        rq1_dataset = None if dataset_choice == all_datasets_label else dataset_choice
         topic_slice = None if topics_choice == all_topics_label else (topics_choice,)
 
         empty = (pl.DataFrame(), pl.DataFrame(), pl.DataFrame())
         full_grid = (
-            compute_registered_edge_comparisons(rq1_results, catalog, main_edges)
+            compute_registered_edge_comparisons(
+                rq1_results, catalog, main_edges, grid=grid
+            )
             if main_edges
             else empty
         )
         scoped = (
             compute_registered_edge_comparisons(
-                rq1_results, catalog, main_edges, requested_topics=topic_slice
+                rq1_results,
+                catalog,
+                main_edges,
+                requested_topics=topic_slice,
+                grid=grid,
             )
             if main_edges and topic_slice
             else full_grid
@@ -1249,12 +1284,12 @@ def main():
             else:
                 render_rq1_single_dataset(
                     main_edges, catalog, full_grid[2], rq1_metric, rq1_dataset,
-                    topic_slice,
+                    topic_slice, grid,
                 )
             st.divider()
             render_rq1_heatmap(
                 main_edges, catalog, full_grid[2], rq1_metric, rq1_dataset,
-                topic_slice,
+                topic_slice, grid,
             )
 
             hidden = (
@@ -1321,6 +1356,7 @@ def main():
                 all_results,
                 catalog,
                 summary_model_ids=None if include_secondary else primary_ids,
+                grid=grid,
             )
             if pair_summary.is_empty():
                 st.info("No catalog baseline comparison results are available.")

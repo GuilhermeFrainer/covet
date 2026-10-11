@@ -262,3 +262,11 @@ def test_heatmap_averages_seeds_per_topic_count(tmp_path):
     )
     assert [path.suffix for path in written] == [".pdf"]
     assert written[0].stat().st_size > 0
+
+
+def test_topic_grid_note_names_dataset_specific_counts():
+    assert paper_outputs.topic_grid_note("common") == ""
+    assert paper_outputs.topic_grid_note("dataset") == (
+        "Requested topic counts are 8, 11, 14, 17 and 20 on ANES; "
+        "4, 6, 8, 10 and 12 on Gadarian; 10 to 50 elsewhere."
+    )

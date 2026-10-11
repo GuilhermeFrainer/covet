@@ -46,6 +46,8 @@ After executing `merge_results.py`, certain unmerged files (e.g., older runs wit
 
 3. **Data Integrity & Deduplication:**
    - The merge step [`merge_files`](../scripts/analysis/merge_results.py) and [`deduplicate_dataframe`](../scripts/analysis/merge_results.py) ensure that the latest timestamped metrics are retained in the merged CSV/JSON.
+   - Rows are matched by model, requested topic count and seed, not by the run index in their name (`baseline_2_seed…`), which changes with the topic-count grid. Runs of the common and dataset-specific grids (see [src/topic_grids.py](../src/topic_grids.py)) are therefore kept side by side, and a rerun of the same topic count replaces the older run.
+   - The completeness check counts only the topic counts a model's config requests now, so after a grid change a dataset's merge is blocked until the new grid is complete, unless `--allow-partial` is passed.
 
 ---
 

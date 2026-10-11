@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from scripts.analysis.merge_results import (  # noqa: E402
     archive_files,
+    deduplicate_dataframe,
     get_dataset_info,
     group_files,
     merge_files,
@@ -476,3 +477,47 @@ def test_merge_files_json_mixed_schema_types(tmp_path):
     assert len(merged_df) == 2
     assert merged_df["representation"].dtype == pl.List(pl.String)
     assert merged_df["representative_docs"].dtype == pl.List(pl.String)
+
+
+def _grid_runs(counts, timestamp, c_v):
+    """Baseline runs for one seed, named by their index in a topic-count grid."""
+    return pl.DataFrame(
+        {
+            "dataset_name": ["gadarian"] * len(counts),
+            "model_name": [f"baseline_{i}_seed1234" for i in range(1, len(counts) + 1)],
+            "random_state": [1234] * len(counts),
+            "nr_topics": list(counts),
+            "file_timestamp": [timestamp] * len(counts),
+            "c_v": [c_v] * len(counts),
+        }
+    )
+
+
+def test_merge_files_keeps_runs_of_two_topic_grids(tmp_path):
+    """Run indices differ between grids; runs are matched by topic count."""
+    out_csv = tmp_path / "gadarian_standard_merged.csv"
+    _grid_runs((10, 20, 30, 40, 50), "20261001-100000", 0.5).write_csv(out_csv)
+    new = tmp_path / "gadarian_standard_baseline-20261011-100000-1234.csv"
+    _grid_runs((4, 6, 8, 10, 12), "20261011-100000", 0.9).write_csv(new)
+
+    merge_files([new], out_csv, dry_run=False, force=True, allow_partial=True)
+
+    res = pl.read_csv(out_csv).sort("nr_topics")
+    assert res["nr_topics"].to_list() == [4, 6, 8, 10, 12, 20, 30, 40, 50]
+    # The rerun of 10 topics replaces the older run; 20 to 50 are kept.
+    assert res["c_v"].to_list() == [0.9] * 5 + [0.5] * 4
+    assert "__run" not in res.columns
+
+
+def test_deduplicate_dataframe_json_keeps_topics_of_two_grids():
+    old = _grid_runs((10, 20), "20261001-100000", 0.5)
+    new = _grid_runs((4, 10), "20261011-100000", 0.9)
+    topics = pl.concat([old, new]).rename({"model_name": "model_id"})
+    topics = pl.concat([topics.with_columns(topic_id=pl.lit(t)) for t in (0, 1)])
+
+    res = deduplicate_dataframe(topics, is_json=True)
+
+    kept = res.group_by("nr_topics").agg(pl.col("c_v").unique()).sort("nr_topics")
+    assert kept["nr_topics"].to_list() == [4, 10, 20]
+    assert kept["c_v"].to_list() == [[0.9], [0.9], [0.5]]
+    assert res.height == 6

@@ -150,3 +150,57 @@ def test_use_trump_variant_counts_exactly_one_trump():
     assert sample["value"].to_list() == [1, 3]
     with pytest.raises(ValueError):
         use_trump_variant(rows, "trump_s10")
+
+
+def _two_grid_results() -> pl.DataFrame:
+    """`_results` plus Gadarian and ANES runs on their own topic-count grids."""
+    rows = _results().to_dicts()
+    for dataset, counts in (("gadarian", (4, 6, 8, 12)), ("anes", (8, 11, 14, 17))):
+        for seed in SEEDS:
+            for k in counts:
+                for model, bonus in (("base", 0.0), ("var", k / 1000)):
+                    rows.append(
+                        {
+                            **rows[0],
+                            "catalog_id": model,
+                            "role": CATALOG[model]["role"],
+                            "dataset_label": dataset,
+                            "random_state": seed,
+                            "nr_topics": k,
+                            "c_npmi": 0.1 + bonus,
+                        }
+                    )
+    return pl.DataFrame(rows)
+
+
+def _npmi_deltas(grid, requested_topics=None):
+    datasets, _, _ = compute_registered_edge_comparisons(
+        _two_grid_results(),
+        CATALOG,
+        EDGES,
+        requested_topics=requested_topics,
+        grid=grid,
+    )
+    rows = datasets.filter(
+        pl.col("Metric").eq("c_npmi") & pl.col("Improvement delta").is_not_null()
+    )
+    return dict(zip(rows["Dataset"], rows["Improvement delta"]))
+
+
+def test_dataset_grid_matches_each_dataset_on_its_own_topic_counts():
+    # The variant's NPMI bonus is k / 1000, so Δ is the mean requested count.
+    assert _npmi_deltas("common") == pytest.approx(
+        {"anes": 0.03, "fed": 0.03, "gadarian": 0.03}
+    )
+    assert _npmi_deltas("dataset") == pytest.approx(
+        {"anes": 0.014, "fed": 0.03, "gadarian": 0.008}
+    )
+
+
+def test_topic_slice_off_a_datasets_grid_leaves_the_dataset_out():
+    assert _npmi_deltas("dataset", requested_topics=(30,)) == pytest.approx(
+        {"fed": 0.03}
+    )
+    assert _npmi_deltas("dataset", requested_topics=(8,)) == pytest.approx(
+        {"anes": 0.008, "gadarian": 0.008}
+    )

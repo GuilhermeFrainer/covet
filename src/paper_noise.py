@@ -3,14 +3,14 @@
 A model could look coherent by sending hard documents to the noise cluster,
 so the appendix reports, for each HDBSCAN-based model and dataset, the share
 of documents left as noise: mean and standard deviation over the runs (3
-seeds x 5 requested topic counts).
+seeds x 5 requested topic counts on the dataset's grid, see `topic_grids`).
 """
 
 from __future__ import annotations
 
 import polars as pl
 
-from src.comparisons.analysis import BENCHMARK_DATASETS, REQUESTED_TOPICS
+from src.comparisons.analysis import BENCHMARK_DATASETS
 from src.paper_benchmark import model_runs, standard_runs
 from src.paper_outputs import (
     DATASET_LABELS,
@@ -20,20 +20,24 @@ from src.paper_outputs import (
     paper_label,
     weight_note,
 )
+from src.topic_grids import DEFAULT_TOPIC_GRID, topic_grid
 
 NOISE_MODELS = ("baseline", *HDBSCAN_VARIANTS)
 
 
-def noise_coverage(results: pl.DataFrame, models=NOISE_MODELS) -> pl.DataFrame:
+def noise_coverage(
+    results: pl.DataFrame, models=NOISE_MODELS, grid: str = DEFAULT_TOPIC_GRID
+) -> pl.DataFrame:
     """Noise share (% of documents) per model and dataset, over its runs.
 
-    `Complete` is true when every seed has all requested topic counts.
+    Runs are those on the dataset's `grid`. `Complete` is true when every
+    seed has all of the grid's topic counts.
     """
     standard = standard_runs(results)
     rows = []
     for model in models:
         for dataset in BENCHMARK_DATASETS:
-            runs = model_runs(standard, model, dataset).with_columns(
+            runs = model_runs(standard, model, dataset, grid).with_columns(
                 (
                     pl.col("outliers").cast(pl.Float64, strict=False)
                     / pl.col("n_observations").cast(pl.Float64, strict=False)
@@ -49,7 +53,7 @@ def noise_coverage(results: pl.DataFrame, models=NOISE_MODELS) -> pl.DataFrame:
                     "Dataset": dataset,
                     "Runs": noise.len(),
                     "Complete": noise.len()
-                    == runs["seed"].n_unique() * len(REQUESTED_TOPICS),
+                    == runs["seed"].n_unique() * len(topic_grid(dataset, grid)),
                     "Noise mean": noise.mean(),
                     "Noise SD": noise.std() if noise.len() > 1 else 0.0,
                 }

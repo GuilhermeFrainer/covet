@@ -70,3 +70,20 @@ def test_noise_table_marks_missing_datasets_and_incomplete_runs():
     assert append.split(" & ")[-1].startswith(r"0.0$^\ddagger$")
     assert "Incomplete runs" in latex and "Over fewer datasets" in latex
     assert "A note." in latex and "Preliminary" not in latex
+
+
+def test_noise_coverage_uses_the_datasets_grid():
+    rows = [
+        {**row, "nr_topics": k}
+        for row in _results("baseline", (20, 40, 60), ("gadarian",))
+        if row["nr_topics"] == 10
+        for k in (4, 6, 8, 10, 12)
+    ]
+    common = paper_noise.noise_coverage(pl.DataFrame(rows), ("baseline",))
+    assert common.row(0, named=True)["Runs"] == 3
+    assert not common.row(0, named=True)["Complete"]
+    dataset = paper_noise.noise_coverage(
+        pl.DataFrame(rows), ("baseline",), grid="dataset"
+    )
+    assert dataset.row(0, named=True)["Runs"] == 15
+    assert dataset.row(0, named=True)["Complete"]

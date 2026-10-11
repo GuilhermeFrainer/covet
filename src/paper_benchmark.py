@@ -1,7 +1,8 @@
 """Free-for-all benchmark table (T2): mean scores and Friedman ranks.
 
 Each model's score on a dataset is the mean over its runs (3 seeds x 5
-requested topic counts; STM has one run per topic count). Models are ranked
+requested topic counts on the dataset's grid, see `topic_grids`; STM has one
+run per topic count). Models are ranked
 within each dataset (1 = best, ties averaged), and the average ranks are
 compared with the Iman-Davenport correction of the Friedman test, with
 Kendall's W as the effect size. Only models with complete runs on every
@@ -21,11 +22,7 @@ import yaml
 from scipy.stats import f as f_distribution
 from scipy.stats import rankdata
 
-from src.comparisons.analysis import (
-    BENCHMARK_DATASETS,
-    METRIC_DIRECTIONS,
-    REQUESTED_TOPICS,
-)
+from src.comparisons.analysis import BENCHMARK_DATASETS, METRIC_DIRECTIONS
 from src.comparisons.views import STANDARD_CONDITION
 from src.paper_outputs import (
     PRELIMINARY_NOTE,
@@ -34,6 +31,7 @@ from src.paper_outputs import (
     paper_label,
     weight_note,
 )
+from src.topic_grids import DEFAULT_TOPIC_GRID, topic_grid
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BENCHMARK_CONFIG = PROJECT_ROOT / "config" / "paper_benchmark.yaml"
@@ -96,16 +94,22 @@ def standard_runs(results: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def model_runs(standard: pl.DataFrame, model_id: str, dataset: str) -> pl.DataFrame:
+def model_runs(
+    standard: pl.DataFrame,
+    model_id: str,
+    dataset: str,
+    grid: str = DEFAULT_TOPIC_GRID,
+) -> pl.DataFrame:
     """One run per seed and requested topic count of a model on a dataset.
 
-    `standard` comes from `standard_runs`. Merged rows win over raw copies.
+    Only topic counts on the dataset's `grid` count. `standard` comes from
+    `standard_runs`. Merged rows win over raw copies.
     """
     return (
         standard.filter(
             (pl.col("catalog_id") == model_id)
             & (pl.col("dataset_label") == dataset)
-            & pl.col("requested").is_in(list(REQUESTED_TOPICS))
+            & pl.col("requested").is_in(list(topic_grid(dataset, grid)))
         )
         .sort("merged", descending=True)
         .unique(subset=["seed", "requested"], keep="first", maintain_order=True)
@@ -117,11 +121,12 @@ def dataset_scores(
     models: list[dict],
     metrics,
     realized: dict[str, int] | None = None,
+    grid: str = DEFAULT_TOPIC_GRID,
 ) -> pl.DataFrame:
     """Per model and dataset: run count, completeness and mean scores.
 
-    A model is complete on a dataset when every requested topic count is
-    present for each of its seeds and every metric is scored. For each
+    A model is complete on a dataset when every topic count of the dataset's
+    `grid` is present for each of its seeds and every metric is scored. For each
     dataset, the first complete source in the model's `sources` is used.
     `realized` maps `run_uid` to the realized topic count of runs in
     `REQUESTED_COUNT_MODELS` (see `realized_topic_counts`).
@@ -132,11 +137,11 @@ def dataset_scores(
         for dataset in BENCHMARK_DATASETS:
             chosen = None
             for source in model["sources"]:
-                runs = model_runs(standard, source, dataset)
+                runs = model_runs(standard, source, dataset, grid)
                 if runs.is_empty():
                     continue
                 candidate = _summarize(
-                    runs, model["id"], source, dataset, metrics, realized or {}
+                    runs, model["id"], source, dataset, metrics, realized or {}, grid
                 )
                 if chosen is None or (candidate["Complete"] and not chosen["Complete"]):
                     chosen = candidate
@@ -148,7 +153,7 @@ def dataset_scores(
 
 
 def _summarize(
-    runs: pl.DataFrame, model_id, source, dataset, metrics, realized: dict
+    runs: pl.DataFrame, model_id, source, dataset, metrics, realized: dict, grid
 ) -> dict:
     seeds = runs["seed"].n_unique()
     scored = all(
@@ -161,7 +166,7 @@ def _summarize(
         "Source": source,
         "Dataset": dataset,
         "Runs": runs.height,
-        "Complete": scored and runs.height == seeds * len(REQUESTED_TOPICS),
+        "Complete": scored and runs.height == seeds * len(topic_grid(dataset, grid)),
     }
     for metric in metrics:
         row[metric] = (
